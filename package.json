@@ -1,0 +1,12 @@
+{
+  "name": "cf-link-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy", // 如果你还想用 Wrangler 单独部署 Functions
+    "start": "wrangler dev"      // 本地开发（需要 Wrangler）
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0" // 或最新版
+  }
+}
