@@ -15,9 +15,9 @@ function handleSpecialCases(requestToModify, targetUrlForRules) {
       case "KEEP":
         break;
       case "DELETE":
-        requestToModify.headers.删除(key);
+        requestToModify.headers.delete(key);
         break;
-      默认:
+      default:
         requestToModify.headers.set(key, value);
         break;
     }
@@ -98,10 +98,10 @@ async function processProxyRequest(incomingRequest) {
       try {
         actualUrl = new URL('https://' + actualUrlStr);
       } catch (e2) {
-        return new Response(`无效的目标URL (1): "${actualUrlStr}"`, { 状态: 400 });
+        return new Response(`无效的目标URL (1): "${actualUrlStr}"`, { status: 400 });
       }
     } else {
-      return new Response(`无效的目标URL (2): "${actualUrlStr}"`, { 状态: 400 });
+      return new Response(`无效的目标URL (2): "${actualUrlStr}"`, { status: 400 });
     }
   }
 
@@ -109,7 +109,7 @@ async function processProxyRequest(incomingRequest) {
   const modifiedRequest = new Request(actualUrl.toString(), {
     headers: modifiedRequestHeaders,
     method: incomingRequest.method,
-    内容: incomingRequest.内容,
+    body: incomingRequest.body,
     redirect: 'follow'
   });
 
@@ -117,7 +117,7 @@ async function processProxyRequest(incomingRequest) {
 
   try {
     const response = await fetch(modifiedRequest);
-    const modifiedResponse = new Response(response.内容, response);
+    const modifiedResponse = new Response(response.body, response);
 
     modifiedResponse.headers.set('Access-Control-Allow-Origin', '*');
     modifiedResponse.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS, PUT, DELETE, PATCH');
@@ -131,13 +131,13 @@ async function processProxyRequest(incomingRequest) {
   } catch (error) {
     console.error(`Fetch error for ${actualUrl.toString()}: ${error.message}`);
     if (error.message.includes('DNS lookup failed')) {
-      return new Response(`无法解析目标主机: ${actualUrl.hostname}`, { 状态: 502 });
+      return new Response(`无法解析目标主机: ${actualUrl.hostname}`, { status: 502 });
     }
-    return new Response(`代理请求失败: ${error.message}`, { 状态: 502 });
+    return new Response(`代理请求失败: ${error.message}`, { status: 502 });
   }
 }
 
-输出 async function onRequest(context) {
+export async function onRequest(context) {
   // context.request is the incoming request.
   // context.env is environment variables.
   // context.params contains route parameters (like `path` for [[path]].js).
