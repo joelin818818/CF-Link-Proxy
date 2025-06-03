@@ -36,16 +36,117 @@ async function processProxyRequest(incomingRequest) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>CF-Link-Proxy</title>
         <style>
-            body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; margin: 0; background-color: #f0f2f5; }
-            .container { background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 500px; width: 90%; }
+            body { 
+                font-family: sans-serif; 
+                display: flex; 
+                flex-direction: column; 
+                align-items: center; 
+                justify-content: center; 
+                min-height: 90vh; 
+                margin: 0; 
+                background-color: #f0f2f5; 
+                transition: background-color 0.3s, color 0.3s;
+                position: relative; /* For absolute positioning of corner elements */
+            }
+            .container { 
+                background-color: white; 
+                padding: 30px; 
+                border-radius: 8px; 
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+                text-align: center; 
+                max-width: 500px; 
+                width: 90%; 
+                transition: background-color 0.3s, box-shadow 0.3s;
+            }
             h1 { color: #1877f2; margin-bottom: 20px; }
-            input[type="url"] { width: calc(100% - 24px); padding: 12px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
-            button { background-color: #1877f2; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+            input[type="url"] { 
+                width: calc(100% - 24px); 
+                padding: 12px; 
+                margin-bottom: 20px; 
+                border: 1px solid #ccc; 
+                border-radius: 6px; 
+                font-size: 16px; 
+            }
+            button { 
+                background-color: #1877f2; 
+                color: white; 
+                border: none; 
+                padding: 12px 20px; 
+                font-size: 16px; 
+                border-radius: 6px; 
+                cursor: pointer; 
+                transition: background-color 0.2s; 
+            }
             button:hover { background-color: #166fe5; }
             .footer { margin-top: 20px; font-size: 0.9em; color: #606770; }
+
+            /* Corner elements */
+            .github-link {
+                position: absolute;
+                top: 20px;
+                left: 20px;
+                text-decoration: none;
+                color: #1877f2;
+                font-weight: bold;
+                font-size: 1.1em;
+                z-index: 10; /* Ensure it's above other content */
+            }
+            .github-link:hover {
+                text-decoration: underline;
+            }
+            .dark-mode-toggle {
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                background: none;
+                border: none;
+                font-size: 1.8em; /* Slightly larger for easier click */
+                cursor: pointer;
+                padding: 0;
+                color: #333; /* Default light mode color */
+                transition: color 0.3s;
+                z-index: 10; /* Ensure it's above other content */
+            }
+
+            /* Dark Mode Styles */
+            body.dark-mode {
+                background-color: #2c2c2c;
+                color: #e0e0e0;
+            }
+            body.dark-mode .container {
+                background-color: #3a3a3a;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            }
+            body.dark-mode h1 {
+                color: #79afe8;
+            }
+            body.dark-mode input[type="url"] {
+                background-color: #555;
+                color: #eee;
+                border-color: #666;
+            }
+            body.dark-mode button {
+                background-color: #555;
+                color: white;
+            }
+            body.dark-mode button:hover {
+                background-color: #666;
+            }
+            body.dark-mode .dark-mode-toggle {
+                color: #e0e0e0;
+            }
+            body.dark-mode .github-link {
+                color: #79afe8;
+            }
+            body.dark-mode .footer {
+                color: #a0a0a0;
+            }
         </style>
     </head>
     <body>
+        <a href="https://github.com/joelin818818/CF-Link-Proxy" target="_blank" class="github-link">GitHub</a>
+        <button id="darkModeToggle" class="dark-mode-toggle">🌙</button>
+
         <div class="container">
             <h1>CF-Link-Proxy</h1>
             <p>请输入目标链接 (例如: https://example.com):</p>
@@ -75,8 +176,35 @@ async function processProxyRequest(incomingRequest) {
                 }
                 window.location.href = '/' + targetUrl; // Navigate to /TARGET_URL relative to current Pages URL
             }
+
             document.getElementById('targetUrlInput').addEventListener('keypress', function(event) {
                 if (event.key === 'Enter') navigateToProxy();
+            });
+
+            // Dark Mode Script
+            document.addEventListener('DOMContentLoaded', () => {
+                const toggleButton = document.getElementById('darkModeToggle');
+                const body = document.body;
+
+                // Check for saved preference
+                const savedTheme = localStorage.getItem('theme');
+                if (savedTheme === 'dark') {
+                    body.classList.add('dark-mode');
+                    toggleButton.textContent = '☀️'; // Sun icon for dark mode
+                } else {
+                    toggleButton.textContent = '🌙'; // Moon icon for light mode
+                }
+
+                toggleButton.addEventListener('click', () => {
+                    body.classList.toggle('dark-mode');
+                    if (body.classList.contains('dark-mode')) {
+                        localStorage.setItem('theme', 'dark');
+                        toggleButton.textContent = '☀️';
+                    } else {
+                        localStorage.setItem('theme', 'light');
+                        toggleButton.textContent = '🌙';
+                    }
+                });
             });
         </script>
     </body>
