@@ -1,32 +1,93 @@
-# 🔗 CF 网络中继 (CF Network Relay)
+## CF-Link-Proxy
 
-一个 CF Workers 脚本，通过 CF 的网络去访问其他网站或下载文件。好处是，如果直接访问某个资源不太稳定或者速度慢，用这个脚本中转一下，可能会变得更流畅、更不容易断开。
+---
 
-## ✨ 主要能做啥
+###  README (中文)
 
-*   **让连接更稳**: 把你的网络请求先发给遍布全球的 CF 服务器，再由 CF 服务器去请求你真正想访问的目标。这样可以避开一些不稳定的网络路径，让连接更可靠，特别适合下载大文件。
-*   **自动处理网址**: 如果你只输入了类似 `example.com` 这样的域名，它会自动帮你补全成 `https://example.com`。也会检查一下你输入的网址格式对不对。
-*   **调整请求细节 (可配置)**:
-    *   默认情况下，它会去掉你发出去的请求里的一些信息，比如 `Origin` 和 `Referer` 头。
-    *   你可以通过修改脚本里的 `specialCases` 设置，来控制怎么处理发往特定网站或所有网站的请求头。比如，你可以选择保留某些请求头（对下载断点续传可能有用），或者删掉某些，或者设置成特定的值。
-*   **方便网页内使用**: 它会自动给中转过来的响应加上一些必要的HTTP头部 (比如 `Access-Control-Allow-Origin: *`)。这样，如果你想在自己的网页里通过这个脚本去加载图片、数据什么的，就不太会遇到跨域问题。
-*   **出错会告诉你**: 如果你给的网址不对，或者中转的时候出了问题，它会尽量给出明确的提示。
+`CF-Link-Proxy` 是一个 CF Workers 脚本，旨在提供一个通过 CF 网络中继网络请求的工具。它的主要目的是帮助用户在访问某些网络资源（如下载链接）时，获得更稳定、更持续的连接体验，尤其是在直接连接目标服务器存在网络波动或速度不理想的情况下。
 
-## 🛠️ 可调的配置项
+#### ✨ 主要功能
 
-脚本里有一个叫做 `specialCases` 的 JavaScript 对象，你可以修改它来影响脚本的行为：
+*   **🌐 连接中继与优化**: 利用 CF 强大的全球网络作为中转，以期改善连接的稳定性和下载的持续性。
+*   **🚀 智能 URL 处理**: 自动为用户输入的裸域名（如 `example.com`）补全 `https://` 协议，并进行基础的URL有效性检查。
+*   **🔧 请求头定制 (可配置)**:
+    *   默认情况下，脚本会移除传出请求中的 `Origin` 和 `Referer` HTTP头部。
+    *   用户可以通过修改脚本中的 `specialCases` JavaScript 对象，为所有域名或特定域名自定义请求头的处理策略。可选择保留（`KEEP`）、删除（`删除`）或设置（指定值）特定的HTTP头部，以适应不同目标服务器的需求（例如，保留 `Range` 头以支持断点续传）。
+*   **🤝 跨域适应性**: 自动向从目标服务器获取的响应中注入必要的HTTP头部（如 `Access-Control-Allow-Origin: *`），使得通过此服务中继的资源能够更容易地被不同源的Web应用程序集成和使用。
+*   **🛡️ 错误反馈**: 当用户提供的URL无效或中继过程中发生网络错误时，脚本会向客户端返回相应的错误状态和提示信息。
 
+#### 🛠️ 可配置项: `specialCases`
+
+脚本内包含一个名为 `specialCases` 的 JavaScript 对象，允许用户精细控制传出请求的HTTP头部。
+
+**配置示例结构**:
 ```javascript
 const specialCases = {
-  "*": { // 这个星号 "*" 代表默认规则，对所有目标网站都生效
-    "Origin": "DELETE",     // 表示删掉 Origin 请求头
-    "Referer": "DELETE"     // 表示删掉 Referer 请求头
-    // 你可以加更多规则，比如：
-    // "User-Agent": "MyCustomClient/1.0" // 把 User-Agent 设置成这个值
+  "*": { // 通用规则，适用于所有未明确指定的域名
+    "Origin": "DELETE",     // 删除 Origin 头部
+    "Referer": "DELETE"     // 删除 Referer 头部
+    // "User-Agent": "MyCustomClient/1.0" // 示例：设置自定义 User-Agent
   },
-  "your-target-domain.com": { // 你也可以为某个特定的域名设置规则
-    "X-Custom-Header": "MyValue", // 给发往这个域名的请求加上或设置 X-Custom-Header
-    "Authorization": "KEEP"       // 保留原始请求中的 Authorization 头 (如果原来有的话)
+  "target-domain.com": { // 针对特定域名的规则
+    "X-Custom-Header": "Value", // 添加或设置 X-Custom-Header
+    "Authorization": "KEEP"     // 保留原始请求中的 Authorization 头部
   }
-  // ...可以加更多特定域名的规则
 };
+```
+
+*   **`"HeaderName": "DELETE"`**: 从请求中移除名为 `HeaderName` 的头部。
+*   **`"HeaderName": "KEEP"`**: 保留原始请求中名为 `HeaderName` 的头部（若存在）。
+*   **`"HeaderName": "SpecificValue"`**: 将名为 `HeaderName` 的头部设置为 `SpecificValue`。
+
+#### ⚠️ 使用须知
+
+*   请确保您的使用行为符合相关服务提供商（包括 CF）的服务条款。
+*   免费层级的服务通常在请求次数、CPU时间等方面存在限制。
+*   部分目标服务器可能对来自代理或特定请求模式的访问设有反制策略。
+
+---
+
+### README (English)
+
+`CF-Link-Proxy` is a CF Workers script designed to provide a tool for relaying network requests through the CF network. Its primary purpose is to help users achieve a more stable and consistent connection experience when accessing certain network resources (such as download links), especially when direct connections to the target server are subject to network fluctuations or suboptimal speeds.
+
+#### ✨ Key Features
+
+*   **🌐 Connection Relaying & Optimization**: Leverages CF's robust global network as an intermediary to potentially improve connection stability and download persistence.
+*   **🚀 Smart URL Handling**: Automatically prepends `https://` to bare domains (e.g., `example.com`) entered by the user and performs basic URL validity checks.
+*   **🔧 Request Header Customization (Configurable)**:
+    *   By default, the script removes `Origin` and `Referer` HTTP headers from outgoing requests.
+    *   Users can modify the `specialCases` JavaScript object within the script to define custom header handling policies for all domains or specific domains. Options include preserving (`KEEP`), deleting (`删除`), or setting (to a specific value) particular HTTP headers to meet the requirements of different target servers (e.g., preserving the `Range` header for resumable downloads).
+*   **🤝 Cross-Origin Adaptability**: Automatically injects necessary HTTP headers (such as `Access-Control-Allow-Origin: *`) into responses fetched from the target server. This facilitates easier integration and usage of resources relayed through this service within web applications dificuldades from different origins.
+*   **🛡️ Error Feedback**: When an invalid URL is provided by the user or a network error occurs during the relay process, the script returns an appropriate error status and message to the client.
+
+#### 🛠️ Configuration: `specialCases`
+
+The script includes a JavaScript object named `specialCases` that allows users to fine-tune the HTTP headers of outgoing requests.
+
+**Configuration Structure Example**:
+```javascript
+const specialCases = {
+  "*": { // Default rules, apply to all domains not explicitly specified
+    "Origin": "DELETE",     // Deletes the Origin header
+    "Referer": "DELETE"     // Deletes the Referer header
+    // "User-Agent": "MyCustomClient/1.0" // Example: Set a custom User-Agent
+  },
+  "target-domain.com": { // Rules specific to "target-domain.com"
+    "X-Custom-Header": "Value", // Adds or sets X-Custom-Header
+    "Authorization": "KEEP"     // Preserves the Authorization header from the original request
+  }
+};
+```
+
+*   **`"HeaderName": "DELETE"`**: Removes the header named `HeaderName` from the request.
+*   **`"HeaderName": "KEEP"`**: Preserves the header named `HeaderName` from the original request (if present).
+*   **`"HeaderName": "SpecificValue"`**: Sets the header named `HeaderName` to `SpecificValue`.
+
+#### ⚠️ Important Considerations
+
+*   Ensure your usage complies with the terms of service of relevant service providers (including CF).
+*   Free tiers of services often have limitations on request counts, CPU time, etc.
+*   Some target servers may have policies मूड or restricting access from proxies or specific request patterns.
+
+```
