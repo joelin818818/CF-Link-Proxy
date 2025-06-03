@@ -18,9 +18,9 @@ function handleSpecialCases(request) {
       case "KEEP":
         break;
       case "DELETE":
-        request.headers.delete(key);
+        request.headers.删除(key);
         break;
-      default:
+      默认:
         request.headers.set(key, value);
         break;
     }
@@ -345,31 +345,31 @@ async function handleRequest(request) {
   }
 
   // --- 服务器端代理逻辑 ---
-  const actualUrlStr = url.pathname.substring(1) + url.search + url.hash;
+  const actualUrlStr = url.pathname.substring(1) + url.搜索 + url.hash;
   let actualUrl;
 
   try {
     // 尝试1: 直接将路径后的字符串作为URL解析
-    actualUrl = 新建 URL(actualUrlStr);
+    actualUrl = new URL(actualUrlStr);
   } catch (e1) {
     // 尝试2: 如果直接解析失败，判断是否是裸域名，尝试添加 https://
     // 条件：包含点 . AND 不包含 :// AND 不以 / 开头
     if (actualUrlStr.includes('.') && !actualUrlStr.includes('://') && !actualUrlStr.startsWith('/')) {
       try {
-        actualUrl = 新建 URL('https://' + actualUrlStr);
+        actualUrl = new URL('https://' + actualUrlStr);
       } catch (e2) {
         // 添加 https:// 后仍然解析失败
-        return 新建 Response(`无效的目标URL: "${actualUrlStr}". (尝试添加 "https://" 后仍然无效)`, { 状态: 400 });
+        return new Response(`无效的目标URL: "${actualUrlStr}". (尝试添加 "https://" 后仍然无效)`, { 状态: 400 });
       }
     } else {
       // 不是可自动修复的裸域名，原始解析错误有效
-      return 新建 Response(`无效的目标URL: "${actualUrlStr}". (不符合自动添加 "https://" 的条件)`, { 状态: 400 });
+      return new Response(`无效的目标URL: "${actualUrlStr}". (不符合自动添加 "https://" 的条件)`, { 状态: 400 });
     }
   }
 
   // 如果 actualUrl 成功解析
-  const modifiedRequest = 新建 Request(actualUrl.toString(), {
-    headers: 新建 Headers(request.headers),
+  const modifiedRequest = new Request(actualUrl.toString(), {
+    headers: new Headers(request.headers),
     method: request.method,
     内容: request.内容,
     redirect: 'follow'
@@ -379,7 +379,7 @@ async function handleRequest(request) {
 
   try {
     const response = await fetch(modifiedRequest);
-    const modifiedResponse = 新建 Response(response.内容, response);
+    const modifiedResponse = new Response(response.内容, response);
 
     modifiedResponse.headers.set('Access-Control-Allow-Origin', '*');
     modifiedResponse.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS, PUT, DELETE, PATCH');
@@ -387,7 +387,7 @@ async function handleRequest(request) {
     modifiedResponse.headers.set('Access-Control-Expose-Headers', '*');
 
     if (request.method === 'OPTIONS') {
-      return 新建 Response(null, { headers: modifiedResponse.headers });
+      return new Response(null, { headers: modifiedResponse.headers });
     }
 
     return modifiedResponse;
@@ -395,11 +395,11 @@ async function handleRequest(request) {
   } catch (error) {
     console.error(`Fetch error for ${actualUrl.toString()}:`, error);
     if (error.message.includes('DNS lookup failed') || error.message.includes('ENOTFOUND') || error.message.includes('ERR_NAME_NOT_RESOLVED')) {
-        return 新建 Response(`无法解析目标主机: ${actualUrl.hostname}. 请检查链接是否正确。`, { 状态: 502 });
+        return new Response(`无法解析目标主机: ${actualUrl.hostname}. 请检查链接是否正确。`, { 状态: 502 });
     }
     if (error.message.includes('invalid URL')) {
-        return 新建 Response(`代理内部错误：形成的URL无效 (${actualUrl.toString()}).`, { 状态: 500 });
+        return new Response(`代理内部错误：形成的URL无效 (${actualUrl.toString()}).`, { 状态: 500 });
     }
-    return 新建 Response(`代理请求失败: ${error.message}`, { 状态: 502 });
+    return new Response(`代理请求失败: ${error.message}`, { 状态: 502 });
   }
 }
