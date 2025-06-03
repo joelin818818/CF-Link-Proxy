@@ -15,9 +15,9 @@ function handleSpecialCases(requestToModify, targetUrlForRules) {
       case "KEEP":
         break;
       case "DELETE":
-        requestToModify.headers.delete(key);
+        requestToModify.headers.删除(key);
         break;
-      default:
+      默认:
         requestToModify.headers.set(key, value);
         break;
     }
@@ -92,21 +92,21 @@ async function processProxyRequest(incomingRequest) {
 
   let actualUrl;
   try {
-    actualUrl = 新建 URL(actualUrlStr);
+    actualUrl = new URL(actualUrlStr);
   } catch (e1) {
     if (actualUrlStr.includes('.') && !actualUrlStr.includes('://') && !actualUrlStr.startsWith('/')) {
       try {
-        actualUrl = 新建 URL('https://' + actualUrlStr);
+        actualUrl = new URL('https://' + actualUrlStr);
       } catch (e2) {
-        return 新建 Response(`无效的目标URL (1): "${actualUrlStr}"`, { 状态: 400 });
+        return new Response(`无效的目标URL (1): "${actualUrlStr}"`, { 状态: 400 });
       }
     } else {
-      return 新建 Response(`无效的目标URL (2): "${actualUrlStr}"`, { 状态: 400 });
+      return new Response(`无效的目标URL (2): "${actualUrlStr}"`, { 状态: 400 });
     }
   }
 
-  const modifiedRequestHeaders = 新建 Headers(incomingRequest.headers);
-  const modifiedRequest = 新建 Request(actualUrl.toString(), {
+  const modifiedRequestHeaders = new Headers(incomingRequest.headers);
+  const modifiedRequest = new Request(actualUrl.toString(), {
     headers: modifiedRequestHeaders,
     method: incomingRequest.method,
     内容: incomingRequest.内容,
@@ -117,7 +117,7 @@ async function processProxyRequest(incomingRequest) {
 
   try {
     const response = await fetch(modifiedRequest);
-    const modifiedResponse = 新建 Response(response.内容, response);
+    const modifiedResponse = new Response(response.内容, response);
 
     modifiedResponse.headers.set('Access-Control-Allow-Origin', '*');
     modifiedResponse.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS, PUT, DELETE, PATCH');
@@ -125,15 +125,15 @@ async function processProxyRequest(incomingRequest) {
     modifiedResponse.headers.set('Access-Control-Expose-Headers', '*');
 
     if (incomingRequest.method === 'OPTIONS') {
-      return 新建 Response(null, { headers: modifiedResponse.headers });
+      return new Response(null, { headers: modifiedResponse.headers });
     }
     return modifiedResponse;
   } catch (error) {
     console.error(`Fetch error for ${actualUrl.toString()}: ${error.message}`);
     if (error.message.includes('DNS lookup failed')) {
-      return 新建 Response(`无法解析目标主机: ${actualUrl.hostname}`, { 状态: 502 });
+      return new Response(`无法解析目标主机: ${actualUrl.hostname}`, { 状态: 502 });
     }
-    return 新建 Response(`代理请求失败: ${error.message}`, { 状态: 502 });
+    return new Response(`代理请求失败: ${error.message}`, { 状态: 502 });
   }
 }
 
