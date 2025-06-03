@@ -10,7 +10,7 @@ const specialCases = {
 }
 
 function handleSpecialCases(request) {
-  const url = new URL(request.url);
+  const url = 新建 URL(request.url);
   const rules = specialCases[url.hostname] || specialCases["*"] || {};
 
   for (const [key, value] of Object.entries(rules)) {
@@ -28,7 +28,7 @@ function handleSpecialCases(request) {
 }
 
 async function handleRequest(request) {
-  const url = new URL(request.url);
+  const url = 新建 URL(request.url);
 
   if (url.pathname === "/") {
     const html = `
