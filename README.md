@@ -1,8 +1,10 @@
 ## CF-Link-Proxy
 
+![image](https://github.com/user-attachments/assets/962182e7-d99e-4233-ac30-e130d07a2de5)
+
 ---
 
-###  README (中文)
+
 
 `CF-Link-Proxy` 是一个 CF Workers 脚本，旨在提供一个通过 CF 网络中继网络请求的工具。它的主要目的是帮助用户在访问某些网络资源（如下载链接）时，获得更稳定、更持续的连接体验，尤其是在直接连接目标服务器存在网络波动或速度不理想的情况下。
 
@@ -47,7 +49,7 @@ const specialCases = {
 
 ---
 
-### README (English)
+
 
 `CF-Link-Proxy` is a CF Workers script designed to provide a tool for relaying network requests through the CF network. Its primary purpose is to help users achieve a more stable and consistent connection experience when accessing certain network resources (such as download links), especially when direct connections to the target server are subject to network fluctuations or suboptimal speeds.
 
