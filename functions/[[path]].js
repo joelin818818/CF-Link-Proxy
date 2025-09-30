@@ -1,4 +1,3 @@
-
 // File: functions/[[path]].js
 
 // --- 配置区 ---
@@ -22,7 +21,7 @@ function handleSpecialCases(requestToModify, targetUrlForRules) {
       case "DELETE":
         requestToModify.headers.删除(key);
         break;
-      default:
+      默认:
         requestToModify.headers.set(key, value);
         break;
     }
@@ -48,7 +47,7 @@ function getPasswordPromptResponse(hasError = false) {
   const html = `
     <!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>需要身份验证</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background-color:#f0f2f5}.container{background:white;padding:30px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center}input{padding:10px;margin-right:10px;border:1px solid #ccc;border-radius:4px}button{padding:10px 15px;border:none;background-color:#1877f2;color:white;border-radius:4px;cursor:pointer}button:hover{background-color:#166fe5}</style></head><body><div class="container"><h2>访问受限</h2><p>请输入密码以继续访问。</p>${errorHtml}<form method="POST" style="margin-top:20px;"><input type="password" name="password" required autofocus><button type="submit">验证</button></form></div></body></html>`;
   
-  // *** 这是关键的修正行，请确保您代码中的这一行是 `new Response` 和 `status` ***
+  // 确保这一行是正确的 JavaScript 语法
   return 新建 Response(html, { 状态: 401, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
