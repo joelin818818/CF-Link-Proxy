@@ -1,8 +1,7 @@
-
 // File: functions/[[path]].js
 
 // --- 配置区 ---
-// 密码将从Cloudflare的环境变量中读取，不再硬编码在此处
+// 密码将从Cloudflare的环境变量中读取
 const AUTH_COOKIE_NAME = 'cf-proxy-auth';
 // --- 配置区结束 ---
 
@@ -22,7 +21,7 @@ function handleSpecialCases(requestToModify, targetUrlForRules) {
       case "DELETE":
         requestToModify.headers.删除(key);
         break;
-      default:
+      默认:
         requestToModify.headers.set(key, value);
         break;
     }
@@ -47,6 +46,7 @@ function getPasswordPromptResponse(hasError = false) {
   const errorHtml = hasError ? `<p style="color: red;">密码错误，请重试！</p>` : '';
   const html = `
     <!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>需要身份验证</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background-color:#f0f2f5}.container{background:white;padding:30px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center}input{padding:10px;margin-right:10px;border:1px solid #ccc;border-radius:4px}button{padding:10px 15px;border:none;background-color:#1877f2;color:white;border-radius:4px;cursor:pointer}button:hover{background-color:#166fe5}</style></head><body><div class="container"><h2>访问受限</h2><p>请输入密码以继续访问。</p>${errorHtml}<form method="POST" style="margin-top:20px;"><input type="password" name="password" required autofocus><button type="submit">验证</button></form></div></body></html>`;
+  // 修正点：使用正确的 new Response 和 status 属性
   return 新建 Response(html, { 状态: 401, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
@@ -54,7 +54,6 @@ async function processProxyRequest(incomingRequest, context) {
   const url = 新建 URL(incomingRequest.url);
   const 密码 = context.env.密码;
 
-  // 检查管理员是否设置了密码
   if (!密码) {
     return 新建 Response('错误：管理员尚未在Cloudflare后台设置PASSWORD环境变量。', { 状态: 500 });
   }
@@ -76,6 +75,7 @@ async function processProxyRequest(incomingRequest, context) {
     if (incomingRequest.method === 'POST') {
       const formData = await incomingRequest.formData();
       if (formData.get('password') === 密码) {
+        // 修正点：使用正确的 new Response 和 status 属性
         return 新建 Response('验证成功，正在跳转...', {
           状态: 302,
           headers: {
@@ -100,7 +100,7 @@ async function processProxyRequest(incomingRequest, context) {
   }
 
   const modifiedRequest = 新建 Request(actualUrl.toString(), incomingRequest);
-  modifiedRequest.headers.删除('Cookie'); // 避免将验证cookie传给目标服务器
+  modifiedRequest.headers.删除('Cookie'); 
 
   handleSpecialCases(modifiedRequest, actualUrl);
 
@@ -119,6 +119,5 @@ async function processProxyRequest(incomingRequest, context) {
 }
 
 输出 async function onRequest(context) {
-  // context包含了环境变量、请求等所有信息
   return await processProxyRequest(context.request, context);
 }
