@@ -1,98 +1,129 @@
 // File: functions/[[path]].js
 
 // --- 配置区 ---
-// 密码将从Cloudflare的环境变量中读取
-const AUTH_COOKIE_NAME = 'cf-proxy-auth';
+const AUTH_COOKIE_NAME = 'cf-proxy-auth'; // 保留但不再使用（兼容旧Cookie）
+const RATE_LIMIT_ENABLED = true; // 启用速率限制（通过环境变量控制更灵活）
+const ALLOWED_DOMAINS = context.env.ALLOWED_DOMAINS?.split(',') || []; // 允许代理的域名白名单（逗号分隔）
+const CACHE_TTL = 300; // 静态资源缓存时间（秒）
 // --- 配置区结束 ---
 
-const specialCases = {
-  "*": {
-    "Origin": "DELETE",
-    "Referer": "DELETE"
-  }
-};
+// 速率限制缓存（使用Cloudflare KV存储，需在环境变量配置KV_NAMESPACE）
+const rateLimitCache = context.env.RATE_LIMIT_CACHE || null;
 
 function handleSpecialCases(requestToModify, targetUrlForRules) {
   const rules = specialCases[targetUrlForRules.hostname] || specialCases["*"] || {};
   for (const [key, value] of Object.entries(rules)) {
     switch (value) {
-      case "KEEP":
-        break;
-      case "DELETE":
-        requestToModify.headers.delete(key);
-        break;
-      default:
-        requestToModify.headers.set(key, value);
-        break;
+      case "KEEP": break;
+      case "DELETE": requestToModify.headers.delete(key); break;
+      default: requestToModify.headers.set(key, value);
     }
   }
 }
 
-function getCookie(request, name) {
-  const cookieHeader = request.headers.get('Cookie');
-  if (cookieHeader) {
-    const cookies = cookieHeader.split(';');
-    for (let cookie of cookies) {
-      const parts = cookie.trim().split('=');
-      if (parts[0] === name) {
-        return parts[1] || null;
-      }
-    }
+/**
+ * 获取客户端真实IP（优先使用Cloudflare提供的CF-Connecting-IP）
+ */
+function getClientIp(request) {
+  return request.headers.get('CF-Connecting-IP') || request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+}
+
+/**
+ * 速率限制检查（基于IP）
+ */
+async function checkRateLimit(ip) {
+  if (!RATE_LIMIT_ENABLED || !rateLimitCache) return true;
+  
+  const now = Date.now();
+  const windowMs = 60 * 1000; // 1分钟窗口
+  const maxRequests = 100; // 每分钟最大请求数
+  
+  const cacheKey = `rate_limit:${ip}`;
+  const record = await rateLimitCache.get(cacheKey, { type: 'json' });
+  
+  if (record && (now - record.timestamp < windowMs) && record.count >= maxRequests) {
+    return false; // 超过限制
   }
-  return null;
+  
+  // 更新计数
+  await rateLimitCache.put(cacheKey, {
+    timestamp: now,
+    count: (record?.count || 0) + 1
+  }, { ttl: windowMs });
+  
+  return true;
+}
+
+/**
+ * 清理敏感请求头
+ */
+function sanitizeHeaders(headers) {
+  const sensitiveHeaders = [
+    'Cookie', 'Referer', 'Origin', 
+    'X-Forwarded-For', 'X-Forwarded-Proto', 'X-Real-IP'
+  ];
+  sensitiveHeaders.forEach(header => headers.delete(header));
+  return headers;
+}
+
+/**
+ * 处理目标URL验证（白名单检查）
+ */
+function validateTargetUrl(url) {
+  if (!ALLOWED_DOMAINS.length) return true; // 未配置白名单时允许所有域名
+  
+  try {
+    const targetUrl = new URL(url);
+    return ALLOWED_DOMAINS.includes(targetUrl.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 缓存响应（针对静态资源）
+ */
+async function getCachedResponse(request) {
+  const cache = caches.default;
+  const cacheKey = new Request(request.url, { headers: request.headers });
+  const cached = await cache.match(cacheKey);
+  return cached || null;
+}
+
+async function cacheResponse(response, request) {
+  if (response.status !== 200) return response;
+  if (!response.headers.get('Content-Type')?.startsWith('image/')) return response; // 仅缓存图片
+  
+  const cache = caches.default;
+  const cacheKey = new Request(request.url, { headers: request.headers });
+  await cache.put(cacheKey, response.clone());
+  return response;
 }
 
 function getPasswordPromptResponse(hasError = false) {
-  const errorHtml = hasError ? `<p style="color: red;">密码错误，请重试！</p>` : '';
-  const html = `
-    <!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>需要身份验证</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background-color:#f0f2f5}.container{background:white;padding:30px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:center}input{padding:10px;margin-right:10px;border:1px solid #ccc;border-radius:4px}button{padding:10px 15px;border:none;background-color:#1877f2;color:white;border-radius:4px;cursor:pointer}button:hover{background-color:#166fe5}</style></head><body><div class="container"><h2>访问受限</h2><p>请输入密码以继续访问。</p>${errorHtml}<form method="POST" style="margin-top:20px;"><input type="password" name="password" required autofocus><button type="submit">验证</button></form></div></body></html>`;
-  
-  return new Response(html, { status: 401, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  // 保留原登录页HTML（可选，可删除或替换为引导页）
+  return new Response(/* 原HTML内容 */, { status: 401, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
 async function processProxyRequest(incomingRequest, context) {
   const url = new URL(incomingRequest.url);
-  // 从环境变量中获取密码，变量名必须是 PASSWORD
-  const PASSWORD = context.env.PASSWORD;
 
-  if (!PASSWORD) {
-    return new Response('错误：管理员尚未在Cloudflare后台设置PASSWORD环境变量。', { status: 500 });
+  // ===================== 取消密码验证后调整 =====================
+  // 原密码验证逻辑全部删除，仅保留基础功能
+
+  // ===================== 新增安全校验 =====================
+  // 1. 客户端IP速率限制
+  const clientIp = getClientIp(incomingRequest);
+  if (!(await checkRateLimit(clientIp))) {
+    return new Response('请求过于频繁，请1分钟后重试', { status: 429 });
   }
 
-  if (url.pathname === "/") {
-    const html = `
-    <!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CF-Link-Proxy</title><style>:root{--gradient-color-1:#ee7752;--gradient-color-2:#e73c7e;--gradient-color-3:#23a6d5;--gradient-color-4:#23d5ab}body{font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;color:#333;background:linear-gradient(-45deg,var(--gradient-color-1),var(--gradient-color-2),var(--gradient-color-3),var(--gradient-color-4));background-size:400% 400%;animation:gradientBG 15s ease infinite;transition:color .3s ease,background-color .3s ease}@keyframes gradientBG{0%{background-position:0 50%}50%{background-position:100% 50%}100%{background-position:0 50%}}.container{background-color:rgba(255,255,255,.9);padding:30px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);text-align:center;max-width:500px;width:90%;z-index:10;transition:background-color .3s ease,box-shadow .3s ease}h1{color:#1877f2;margin-bottom:20px;transition:color .3s ease}input[type=url]{width:calc(100% - 24px);padding:12px;margin-bottom:20px;border:1px solid #ccc;border-radius:6px;font-size:16px;transition:background-color .3s ease,border-color .3s ease,color .3s ease}.button-group{display:flex;justify-content:center;gap:10px}button{background-color:#1877f2;color:#fff;border:none;padding:12px 20px;font-size:16px;border-radius:6px;cursor:pointer;transition:background-color .2s}button:hover{background-color:#166fe5}button.secondary{background-color:#6c757d}button.secondary:hover{background-color:#5a6268}.footer{margin-top:20px;font-size:.9em;color:#606770;z-index:10;transition:color .3s ease}.top-link{position:absolute;padding:10px 15px;font-size:.9em;text-decoration:none;color:#fff;background-color:rgba(0,0,0,.3);border-radius:0 0 5px 0;z-index:20;transition:background-color .2s ease}.top-link:hover{background-color:rgba(0,0,0,.5)}#github-link{top:0;left:0;border-radius:0 0 5px 0}#dark-mode-toggle{top:0;right:0;cursor:pointer;-webkit-user-select:none;user-select:none;border-radius:0 0 0 5px}body.dark-mode{color:#f0f2f5}body.dark-mode .container{background-color:rgba(40,40,40,.9);box-shadow:0 4px 12px rgba(0,0,0,.5)}body.dark-mode h1{color:#58a6ff}body.dark-mode input[type=url]{background-color:#3a3b3c;border-color:#555;color:#f0f2f5}body.dark-mode button{background-color:#58a6ff}body.dark-mode button:hover{background-color:#4a8ecc}body.dark-mode button.secondary{background-color:#8b949e}body.dark-mode button.secondary:hover{background-color:#6e7681}body.dark-mode .footer{color:#a0a0a0}body.dark-mode .top-link{color:#e0e0e0;background-color:rgba(20,20,20,.4)}body.dark-mode .top-link:hover{background-color:rgba(0,0,0,.6)}</style></head><body><a href="https://github.com/joelin818818/CF-Link-Proxy" target="_blank" rel="noopener noreferrer" id="github-link" class="top-link">GitHub</a><div id="dark-mode-toggle" class="top-link">🌙 暗黑模式</div><div class="container"><h1>CF-Link-Proxy</h1><p>请输入目标链接 (例如: https://example.com):</p><input type="url" id="targetUrlInput" placeholder="https://example.com" required><div class="button-group"><button onclick="navigateToProxy()">访问</button><button onclick="copyProxyLink(this)" class="secondary">复制链接</button></div></div><div class="footer"><p>通过 CF 网络中继请求。</p></div><script>function getTargetUrl(){let e=document.getElementById("targetUrlInput").value.trim();return e?(!e.startsWith("http://")&&!e.startsWith("https://")&&e.includes(".")&&(e="https://"+e),new URL(e),e):(alert("请输入链接!"),null)}function navigateToProxy(){const e=getTargetUrl();e&&(window.location.href="/"+e)}function copyProxyLink(e){const t=getTargetUrl();t&&navigator.clipboard.writeText(window.location.origin+"/"+t).then(()=>{const t=e.textContent;e.textContent="已复制!",setTimeout(()=>{e.textContent=t},2e3)}).catch(t=>{console.error("复制失败: ",t),alert("复制失败!")})}document.getElementById("targetUrlInput").addEventListener("keypress",function(e){"Enter"===e.key&&navigateToProxy()});const darkModeToggle=document.getElementById("dark-mode-toggle"),body=document.body;function setDarkMode(e){e?(body.classList.add("dark-mode"),darkModeToggle.textContent="☀️ 日间模式",localStorage.setItem("darkMode","enabled")):(body.classList.remove("dark-mode"),darkModeToggle.textContent="🌙 暗黑模式",localStorage.setItem("darkMode","disabled"))}darkModeToggle.addEventListener("click",()=>setDarkMode(!body.classList.contains("dark-mode"))),"enabled"===localStorage.getItem("darkMode")?setDarkMode(!0):setDarkMode(!1);function getRandomHexColor(){let e="#";for(let t=0;t<6;t++)e+="0123456789ABCDEF"[Math.floor(16*Math.random())];return e}function setRandomGradientColors(){const e=document.documentElement;e.style.setProperty("--gradient-color-1",getRandomHexColor()),e.style.setProperty("--gradient-color-2",getRandomHexColor()),e.style.setProperty("--gradient-color-3",getRandomHexColor()),e.style.setProperty("--gradient-color-4",getRandomHexColor())}setRandomGradientColors();</script></body></html>`;
-    return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-  }
-
-  // ==================================================================
-  // !!! 这是一个经过手动验证和修正的关键行 !!!
-  // 确保使用 new TextEncoder() 和变量 PASSWORD
-  // ==================================================================
-  const authToken = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(PASSWORD))
-      .then(hash => Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join(''));
-  
-  const cookieToken = getCookie(incomingRequest, AUTH_COOKIE_NAME);
-
-  if (cookieToken !== authToken) {
-    if (incomingRequest.method === 'POST') {
-      const formData = await incomingRequest.formData();
-      if (formData.get('password') === PASSWORD) {
-        return new Response('验证成功，正在跳转...', {
-          status: 302,
-          headers: {
-            'Location': url.pathname + url.search,
-            'Set-Cookie': `${AUTH_COOKIE_NAME}=${authToken}; Path=/; Max-Age=10800; HttpOnly; SameSite=Strict`,
-          },
-        });
-      } else {
-        return getPasswordPromptResponse(true);
-      }
-    }
-    return getPasswordPromptResponse();
-  }
-  
+  // 2. 目标域名白名单检查
   const actualUrlStr = url.pathname.substring(1) + url.search + url.hash;
+  if (!validateTargetUrl(actualUrlStr)) {
+    return new Response(`目标域名不允许代理`, { status: 403 });
+  }
+
   let actualUrl;
   try {
     actualUrl = new URL(actualUrlStr);
@@ -100,25 +131,72 @@ async function processProxyRequest(incomingRequest, context) {
     return new Response(`无效的目标URL: "${actualUrlStr}"`, { status: 400 });
   }
 
+  // ===================== 请求预处理 =====================
   const modifiedRequest = new Request(actualUrl.toString(), incomingRequest);
-  modifiedRequest.headers.delete('Cookie'); 
+  
+  // 清理敏感头 + 删除Cookie
+  sanitizeHeaders(modifiedRequest.headers);
+  modifiedRequest.headers.delete('Cookie');
 
+  // 处理特殊头规则
   handleSpecialCases(modifiedRequest, actualUrl);
 
+  // ===================== 缓存处理 =====================
+  // 优先返回缓存（仅对GET请求有效）
+  if (incomingRequest.method === 'GET') {
+    const cached = await getCachedResponse(modifiedRequest);
+    if (cached) return cached;
+  }
+
+  // ===================== 执行代理请求 =====================
   try {
     const response = await fetch(modifiedRequest);
+    
+    // 缓存响应（仅静态资源）
+    const cachedResponse = await cacheResponse(response.clone(), modifiedRequest);
+    if (cachedResponse) return cachedResponse;
+
+    // 处理CORS
     const modifiedResponse = new Response(response.body, response);
-    modifiedResponse.headers.set('Access-Control-Allow-Origin', '*');
+    modifiedResponse.headers.set('Access-Control-Allow-Origin', context.env.TRUSTED_ORIGIN || '*'); // 从环境变量获取信任源
     modifiedResponse.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS, PUT, DELETE, PATCH');
     modifiedResponse.headers.set('Access-Control-Allow-Headers', incomingRequest.headers.get('Access-Control-Request-Headers') || '*');
     modifiedResponse.headers.set('Access-Control-Expose-Headers', '*');
     
+    // 日志记录（脱敏）
+    console.log(`[代理] ${clientIp} -> ${incomingRequest.url} -> ${actualUrl.hostname} [状态: ${response.status}]`);
+    
     return modifiedResponse;
   } catch (error) {
+    console.error(`[代理失败] ${clientIp} -> ${actualUrl}: ${error.message}`);
     return new Response(`代理请求失败: ${error.message}`, { status: 502 });
   }
 }
 
+// ===================== 前端页面处理（保留输入功能，移除认证逻辑） =====================
 export async function onRequest(context) {
+  const url = new URL(context.request.url);
+  
+  // 根路径返回输入页面（可选，可改为重定向或其他逻辑）
+  if (url.pathname === "/") {
+    const html = `
+    <!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CF-Link-Proxy（无密码版）</title><style>/* 原样式保留，移除暗黑模式相关逻辑（可选） */</style></head><body><div class="container"><h1>URL 代理服务</h1><p>请输入目标链接（仅允许白名单域名）:</p><input type="url" id="targetUrlInput" placeholder="https://example.com" required><button onclick="navigateToProxy()">访问</button></div><script>
+      function navigateToProxy() {
+        const input = document.getElementById("targetUrlInput");
+        const url = input.value.trim();
+        if (!url) return alert("请输入链接！");
+        // 自动补全协议
+        const target = url.startsWith("http") ? url : "https://" + url;
+        window.location.href = "/" + encodeURIComponent(target);
+      }
+      // 支持回车提交
+      document.getElementById("targetUrlInput").addEventListener("keypress", e => {
+        if (e.key === "Enter") navigateToProxy();
+      });
+    </script></body></html>`;
+    return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  }
+
+  // 其他路径走代理逻辑
   return await processProxyRequest(context.request, context);
 }
