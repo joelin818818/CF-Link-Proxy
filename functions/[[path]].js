@@ -1,28 +1,33 @@
 // File: functions/[[path]].js
 
-// --- 后端代理逻辑 (保持不变) ---
-const specialCases = { "*": { "Origin": "DELETE", "Referer": "DELETE" } };
-function handleSpecialCases(requestToModify, targetUrlForRules) { /* ... */ }
-async function processProxyRequest(incomingRequest, context) { /* ... */ }
-// ... (为了简洁，后端代理逻辑与上一稳定版完全相同，此处省略，实际使用时请确保存在) ...
-// (请从上一版代码中复制整个 `processProxyRequest` 函数以及它所依赖的 `specialCases` 和 `handleSpecialCases`)
-// --- 正确的后端逻辑开始 ---
-const INJECTION_SCRIPT = `<script>(function(){const p='/';const r=(u)=>{if(typeof u==='string'&&(u.startsWith('http://')||u.startsWith('https://'))){return p+encodeURIComponent(u)}return u};const f=window.fetch;window.fetch=function(i,n){const u=i instanceof Request?i.url:i;const e=r(u);if(i instanceof Request){i=new Request(e,i)}else{i=e}return f.call(this,i,n)};const o=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(t,u,...a){const e=r(u);return o.apply(this,[t,e,...a])};const m=new MutationObserver(s=>{s.forEach(t=>{t.addedNodes.forEach(n=>{if(n.nodeType===1){const e=el=>{const a=['src','href','action','data-src'];a.forEach(t=>{if(el.hasAttribute(t)){el.setAttribute(t,r(el.getAttribute(t)))}});if(el.hasAttribute('srcset')){el.setAttribute('srcset',el.getAttribute('srcset').split(',').map(t=>{const n=t.trim().split(/\s+/);n[0]=r(n[0]);return n.join(' ')}).join(', '))}};if(n.matches('script,link,img,a,source,iframe,form')){e(n)}n.querySelectorAll('script,link,img,a,source,iframe,form').forEach(e)}})})});m.observe(document.documentElement,{childList:!0,subtree:!0})})();</script>`;
-class HeadInjector { element(element) { element.prepend(INJECTION_SCRIPT, { html: true }); } }
-class AttributeRewriter { constructor(prefix) { this.prefix = prefix; } element(element) { const attrs=['href','src','action','data-src'];attrs.forEach(attr=>{const value=element.getAttribute(attr);if(value&&(value.startsWith('http:')||value.startsWith('https://'))){element.setAttribute(attr,this.prefix+encodeURIComponent(value))}});const srcset=element.getAttribute('srcset');if(srcset){const newSrcset=srcset.split(',').map(part=>{const item=part.trim().split(/\s+/);if(item[0].startsWith('http'))item[0]=this.prefix+encodeURIComponent(item[0]);return item.join(' ')}).join(', ');element.setAttribute('srcset',newSrcset)}}}
-async function processProxyRequest(incomingRequest) { const url = new URL(incomingRequest.url); let actualUrlStr = url.pathname.substring(1); try { actualUrlStr = decodeURIComponent(actualUrlStr); } catch(e) {} actualUrlStr += url.search + url.hash; let actualUrl; try { actualUrl = new URL(actualUrlStr); } catch (e) { return new Response(\`无效的目标URL: "\${actualUrlStr}"\`, { status: 400 }); } const modifiedRequest = new Request(actualUrl.toString(), { headers: new Headers(incomingRequest.headers), method: incomingRequest.method, body: incomingRequest.body, redirect: 'follow' }); handleSpecialCases(modifiedRequest, actualUrl); try { const response = await fetch(modifiedRequest); let newResponse = new Response(response.body, response); const contentType = newResponse.headers.get('content-type') || ''; if (contentType.includes('text/html')) { const rewriter = new HTMLRewriter().on('head', new HeadInjector()).on('a,link,script,img,iframe,form,source,video,audio', new AttributeRewriter('/')); newResponse = rewriter.transform(newResponse); } return newResponse; } catch (error) { return new Response(\`代理请求失败: \${error.message}\`, { status: 502 }); } }
-// --- 正确的后端逻辑结束 ---
+// --- 核心功能函数 (基于您提供的稳定版本) ---
 
+const specialCases = {
+  "*": {
+    "Origin": "DELETE",
+    "Referer": "DELETE"
+  }
+};
 
-// --- Worker 入口函数 ---
-export async function onRequest(context) {
-  const url = new URL(context.request.url);
+function handleSpecialCases(requestToModify, targetUrlForRules) {
+  const rules = specialCases[targetUrlForRules.hostname] || specialCases["*"] || {};
+  for (const [key, value] of Object.entries(rules)) {
+    switch (value) {
+      case "KEEP": break;
+      case "DELETE": requestToModify.headers.delete(key); break;
+      default: requestToModify.headers.set(key, value); break;
+    }
+  }
+}
 
+async function processProxyRequest(incomingRequest) {
+  const url = new URL(incomingRequest.url);
+
+  // --- 首页 UI (零依赖、动态背景版本) ---
   if (url.pathname === "/") {
-    const cookieHeader = context.request.headers.get('Cookie') || '';
+    const cookieHeader = incomingRequest.headers.get('Cookie') || '';
     const cookies = Object.fromEntries(cookieHeader.split(';').map(c => c.trim().split('=')));
     const theme = cookies.theme === 'dark' ? 'dark' : 'light';
-
     const html = `
     <!DOCTYPE html>
     <html lang="zh-CN" class="${theme}">
@@ -32,10 +37,7 @@ export async function onRequest(context) {
         <title>CF-Link-Proxy</title>
         <style>
           :root {
-            /* [新增] 渐变色变量 */
-            --gradient-1: #3b82f6; --gradient-2: #8b5cf6;
-            --gradient-3: #ec4899; --gradient-4: #f59e0b;
-            /* UI 颜色变量 */
+            --gradient-1: #3b82f6; --gradient-2: #8b5cf6; --gradient-3: #ec4899; --gradient-4: #f59e0b;
             --text-color: #334155; --card-bg: rgba(255, 255, 255, 0.7);
             --card-shadow: 0 20px 25px -5px rgba(0,0,0,.1), 0 8px 10px -6px rgba(0,0,0,.1);
             --input-text: #1e293b; --footer-text: #64748b; --kbd-bg: #e2e8f0; --kbd-text: #475569;
@@ -45,10 +47,7 @@ export async function onRequest(context) {
             --title-gradient-start: #3b82f6; --title-gradient-end: #6366f1;
           }
           html.dark {
-            /* [新增] 暗黑模式下的渐变色 */
-            --gradient-1: #1e3a8a; --gradient-2: #5b21b6;
-            --gradient-3: #9d174d; --gradient-4: #b45309;
-            /* UI 颜色变量 */
+            --gradient-1: #1e3a8a; --gradient-2: #5b21b6; --gradient-3: #9d174d; --gradient-4: #b45309;
             --text-color: #cbd5e1; --card-bg: rgba(30, 41, 59, 0.5);
             --card-shadow: 0 20px 25px -5px rgba(0,0,0,.2), 0 8px 10px -6px rgba(0,0,0,.2);
             --input-text: #f1f5f9; --footer-text: #64748b; --kbd-bg: #334155; --kbd-text: #e2e8f0;
@@ -61,16 +60,13 @@ export async function onRequest(context) {
             margin: 0; 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: var(--text-color);
-            /* [修改] 应用动态渐变背景 */
             background: linear-gradient(-45deg, var(--gradient-1), var(--gradient-2), var(--gradient-3), var(--gradient-4));
             background-size: 400% 400%;
             animation: gradientBG 15s ease infinite;
             transition: color .3s ease;
           }
-          @keyframes gradientBG { /* [新增] 渐变动画 */
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+          @keyframes gradientBG {
+            0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; }
           }
           .main-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1rem; }
           .header, .footer { width: 100%; max-width: 80rem; padding: 1.5rem 1rem; z-index: 10;}
@@ -98,10 +94,7 @@ export async function onRequest(context) {
             box-shadow: var(--card-shadow); display: flex; overflow: hidden;
             -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
           }
-          #url-input {
-            flex: 1 1 0%; border: none; outline: none; background: transparent;
-            font-size: 1rem; padding: 1rem 1.5rem; color: var(--input-text);
-          }
+          #url-input { flex: 1 1 0%; border: none; outline: none; background: transparent; font-size: 1rem; padding: 1rem 1.5rem; color: var(--input-text); }
           #url-input::placeholder { color: #9ca3af; }
           #access-button {
             border: none; cursor: pointer; padding: 1rem 1.5rem; color: var(--button-text);
@@ -168,18 +161,13 @@ export async function onRequest(context) {
             let targetUrl = urlInput.value.trim();
             if (!targetUrl) return alert('请输入链接!');
             if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
-
-            try { new URL(targetUrl); } 
-            catch (e) { alert('链接格式无效!'); return; }
-
+            try { new URL(targetUrl); } catch (e) { return alert('链接格式无效!'); }
             isLoading = true;
             accessButton.disabled = true;
             buttonText.textContent = '处理中...';
             buttonArrow.style.display = 'none';
             buttonSpinner.style.display = 'inline-block';
-            
-            // 使用 encodeURIComponent 确保URL中的特殊字符被正确处理
-            window.location.href = '/' + encodeURIComponent(targetUrl);
+            window.location.href = '/' + targetUrl;
           };
           
           const applyTheme = (theme, isInitial) => {
@@ -187,7 +175,7 @@ export async function onRequest(context) {
             themeText.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
             if (!isInitial) {
               localStorage.setItem('theme', theme);
-              document.cookie = \`theme=\${theme}; path=/; max-age=31536000\`;
+              document.cookie = "theme=" + theme + "; path=/; max-age=31536000";
             }
           };
 
@@ -197,10 +185,9 @@ export async function onRequest(context) {
           });
           
           accessButton.addEventListener('click', handleAccess);
+          urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleAccess(); });
           
           window.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && document.activeElement === urlInput) { e.preventDefault(); handleAccess(); }
-            if (e.key === 'Escape' && document.activeElement === urlInput) { urlInput.blur(); }
             if (e.key === '/' && document.activeElement !== urlInput) {
               e.preventDefault();
               urlInput.focus();
@@ -211,11 +198,63 @@ export async function onRequest(context) {
         });
       </script>
     </body>
-    </html>
-    `;
+    </html>`;
     return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   }
 
-  // 其他所有路径都走代理逻辑
-  return await processProxyRequest(context.request, context);
-}```
+  // --- 代理请求逻辑 (稳定版) ---
+  let actualUrlStr = url.pathname.substring(1) + url.search + url.hash;
+  
+  try {
+    actualUrlStr = decodeURIComponent(actualUrlStr);
+  } catch(e) { /* 忽略解码失败，使用原始字符串 */ }
+
+  let actualUrl;
+  try {
+    actualUrl = new URL(actualUrlStr);
+  } catch (e1) {
+    if (actualUrlStr.includes('.') && !actualUrlStr.includes('://') && !actualUrlStr.startsWith('/')) {
+      try {
+        actualUrl = new URL('https://' + actualUrlStr);
+      } catch (e2) {
+        return new Response('无效的目标URL (1): "' + actualUrlStr + '"', { status: 400 });
+      }
+    } else {
+      return new Response('无效的目标URL (2): "' + actualUrlStr + '"', { status: 400 });
+    }
+  }
+
+  const modifiedRequest = new Request(actualUrl.toString(), {
+    headers: new Headers(incomingRequest.headers),
+    method: incomingRequest.method,
+    body: incomingRequest.body,
+    redirect: 'follow'
+  });
+
+  handleSpecialCases(modifiedRequest, actualUrl);
+
+  try {
+    const response = await fetch(modifiedRequest);
+    const modifiedResponse = new Response(response.body, response);
+
+    modifiedResponse.headers.set('Access-Control-Allow-Origin', '*');
+    modifiedResponse.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS, PUT, DELETE, PATCH');
+    modifiedResponse.headers.set('Access-Control-Allow-Headers', incomingRequest.headers.get('Access-Control-Request-Headers') || '*');
+    modifiedResponse.headers.set('Access-control-expose-headers', '*');
+
+    if (incomingRequest.method === 'OPTIONS') {
+      return new Response(null, { headers: modifiedResponse.headers });
+    }
+    
+    return modifiedResponse;
+
+  } catch (error) {
+    console.error("Fetch error for " + actualUrl.toString() + ": " + error.message);
+    return new Response("代理请求失败: " + error.message, { status: 502 });
+  }
+}
+
+// Pages Functions 标准入口
+export async function onRequest(context) {
+  return await processProxyRequest(context.request);
+}
