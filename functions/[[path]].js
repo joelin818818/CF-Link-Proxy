@@ -1,13 +1,14 @@
 // File: functions/[[path]].js
 
-/**
- * 为特定目标或所有目标（"*"）修改请求头
- * @param {Request} requestToModify 要修改的请求对象
- * @param {URL} targetUrlForRules 目标URL对象
- */
-function handleSpecialCases(requestToModify, targetUrlForRules) {
-  const specialCases = {}; // 示例: { "example.com": { "user-agent": "MyBot/1.0" } }
+const specialCases = {
+  "*": {
+    "Origin": "DELETE",
+    "Referer": "DELETE"
+  }
+  // ... more special cases if any
+};
 
+function handleSpecialCases(requestToModify, targetUrlForRules) {
   const rules = specialCases[targetUrlForRules.hostname] || specialCases["*"] || {};
   for (const [key, value] of Object.entries(rules)) {
     switch (value) {
@@ -18,151 +19,304 @@ function handleSpecialCases(requestToModify, targetUrlForRules) {
         break;
       default:
         requestToModify.headers.set(key, value);
+        break;
     }
   }
 }
 
-/**
- * 获取客户端真实IP地址
- * @param {Request} request 传入的请求
- * @returns {string} 客户端IP地址
- */
-function getClientIp(request) {
-  return request.headers.get('CF-Connecting-IP') || request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
-}
+async function processProxyRequest(incomingRequest) {
+  const url = new URL(incomingRequest.url); // This will be the Pages URL, e.g., https://your.pages.dev/https://example.com
 
-/**
- * 清理请求中可能包含的敏感信息头
- * @param {Headers} headers 请求头对象
- * @returns {Headers} 清理后的请求头对象
- */
-function sanitizeHeaders(headers) {
-  const sensitiveHeaders = [
-    'Cookie', 'Referer', 'Origin',
-    'X-Forwarded-For', 'X-Forwarded-Proto', 'X-Real-IP'
-  ];
-  sensitiveHeaders.forEach(header => headers.delete(header));
-  return headers;
-}
+  if (url.pathname === "/") {
+    const html = `
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>CF-Link-Proxy</title>
+        <style>
+            :root {
+                --gradient-color-1: #ee7752;
+                --gradient-color-2: #e73c7e;
+                --gradient-color-3: #23a6d5;
+                --gradient-color-4: #23d5ab;
+            }
 
-/**
- * [修正] 验证目标URL是否在允许的域名白名单内（支持通配符）
- * @param {string} url 要验证的目标URL字符串
- * @param {string[]} allowedDomains 允许的域名列表
- * @returns {boolean} 如果允许则返回 true，否则返回 false
- */
-function validateTargetUrl(url, allowedDomains) { // [变化] 接收 allowedDomains 参数
-  if (!allowedDomains.length) return true;
-  
-  try {
-    const targetUrl = new URL(url);
-    const hostname = targetUrl.hostname;
+            body {
+                font-family: sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh; /* Changed to 100vh for full page gradient */
+                margin: 0;
+                color: #333;
+                background: linear-gradient(-45deg, var(--gradient-color-1), var(--gradient-color-2), var(--gradient-color-3), var(--gradient-color-4));
+                background-size: 400% 400%;
+                animation: gradientBG 15s ease infinite;
+                transition: color 0.3s ease, background-color 0.3s ease; /* For dark mode text/bg */
+            }
 
-    return allowedDomains.some(domain => {
-      if (domain.startsWith('*.')) {
-        return hostname.endsWith(domain.substring(1));
-      } else {
-        return hostname === domain;
-      }
-    });
-  } catch {
-    return false;
+            @keyframes gradientBG {
+                0% { background-position: 0% 50%; }
+                50% { background-position: 100% 50%; }
+                100% { background-position: 0% 50%; }
+            }
+
+            .container {
+                background-color: rgba(255, 255, 255, 0.9); /* Slightly transparent white */
+                padding: 30px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                text-align: center;
+                max-width: 500px;
+                width: 90%;
+                z-index: 10;
+                 transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            }
+            h1 {
+                color: #1877f2;
+                margin-bottom: 20px;
+                transition: color 0.3s ease;
+            }
+            input[type="url"] {
+                width: calc(100% - 24px);
+                padding: 12px;
+                margin-bottom: 20px;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+                font-size: 16px;
+                transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+            }
+            button {
+                background-color: #1877f2;
+                color: white;
+                border: none;
+                padding: 12px 20px;
+                font-size: 16px;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }
+            button:hover {
+                background-color: #166fe5;
+            }
+            .footer {
+                margin-top: 20px;
+                font-size: 0.9em;
+                color: #606770;
+                z-index: 10;
+                transition: color 0.3s ease;
+            }
+
+            .top-link {
+                position: absolute;
+                padding: 10px 15px;
+                font-size: 0.9em;
+                text-decoration: none;
+                color: #fff; /* White for better visibility on gradient */
+                background-color: rgba(0,0,0,0.3);
+                border-radius: 0 0 5px 0;
+                z-index: 20;
+                transition: background-color 0.2s ease;
+            }
+            .top-link:hover {
+                background-color: rgba(0,0,0,0.5);
+            }
+
+            #github-link {
+                top: 0;
+                left: 0;
+                border-radius: 0 0 5px 0; /* Rounded bottom-right corner */
+            }
+
+            #dark-mode-toggle {
+                top: 0;
+                right: 0;
+                cursor: pointer;
+                user-select: none;
+                border-radius: 0 0 0 5px; /* Rounded bottom-left corner */
+            }
+
+            /* Dark Mode Styles */
+            body.dark-mode {
+                color: #f0f2f5;
+                /* Gradient will still be primary, but good to have a fallback if needed */
+                /* background-color: #1c1c1e; */
+            }
+            body.dark-mode .container {
+                background-color: rgba(40, 40, 40, 0.9); /* Slightly transparent dark */
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            }
+            body.dark-mode h1 {
+                color: #58a6ff; /* Lighter blue for dark mode */
+            }
+            body.dark-mode input[type="url"] {
+                background-color: #3a3b3c;
+                border-color: #555;
+                color: #f0f2f5;
+            }
+            body.dark-mode button {
+                background-color: #58a6ff;
+            }
+            body.dark-mode button:hover {
+                background-color: #4a8ecc;
+            }
+            body.dark-mode .footer {
+                color: #a0a0a0;
+            }
+            body.dark-mode .top-link {
+                color: #e0e0e0;
+                background-color: rgba(20,20,20,0.4);
+            }
+            body.dark-mode .top-link:hover {
+                background-color: rgba(0,0,0,0.6);
+            }
+        </style>
+    </head>
+    <body>
+        <a href="https://github.com/joelin818818/CF-Link-Proxy" target="_blank" rel="noopener noreferrer" id="github-link" class="top-link">GitHub</a>
+        <div id="dark-mode-toggle" class="top-link">🌙 Dark Mode</div>
+
+        <div class="container">
+            <h1>CF-Link-Proxy</h1>
+            <p>请输入目标链接 (例如: https://example.com):</p>
+            <input type="url" id="targetUrlInput" placeholder="https://example.com" required>
+            <button onclick="navigateToProxy()">访问</button>
+        </div>
+        <div class="footer">
+            <p>通过 CF 网络中继请求。</p>
+        </div>
+
+        <script>
+            function navigateToProxy() {
+                const targetUrlInput = document.getElementById('targetUrlInput');
+                let targetUrl = targetUrlInput.value.trim();
+                if (!targetUrl) {
+                    alert('请输入链接!');
+                    return;
+                }
+                if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://') && targetUrl.includes('.')) {
+                    targetUrl = 'https://' + targetUrl;
+                }
+                try {
+                    new URL(targetUrl);
+                } catch (e) {
+                    alert('链接格式无效!');
+                    return;
+                }
+                window.location.href = '/' + targetUrl;
+            }
+
+            document.getElementById('targetUrlInput').addEventListener('keypress', function(event) {
+                if (event.key === 'Enter') navigateToProxy();
+            });
+
+            // Dark Mode Toggle
+            const darkModeToggle = document.getElementById('dark-mode-toggle');
+            const body = document.body;
+
+            function setDarkMode(isDark) {
+                if (isDark) {
+                    body.classList.add('dark-mode');
+                    darkModeToggle.textContent = '☀️ Light Mode';
+                    localStorage.setItem('darkMode', 'enabled');
+                } else {
+                    body.classList.remove('dark-mode');
+                    darkModeToggle.textContent = '🌙 Dark Mode';
+                    localStorage.setItem('darkMode', 'disabled');
+                }
+            }
+
+            darkModeToggle.addEventListener('click', () => {
+                setDarkMode(!body.classList.contains('dark-mode'));
+            });
+
+            // Load saved dark mode preference
+            if (localStorage.getItem('darkMode') === 'enabled') {
+                setDarkMode(true);
+            } else {
+                setDarkMode(false); // Explicitly set to light if not enabled or not set
+            }
+
+            // Random Gradient Colors
+            function getRandomHexColor() {
+                let color = '#';
+                for (let i = 0; i < 6; i++) {
+                    color += '0123456789ABCDEF'[Math.floor(Math.random() * 16)];
+                }
+                return color;
+            }
+
+            function setRandomGradientColors() {
+                const root = document.documentElement;
+                root.style.setProperty('--gradient-color-1', getRandomHexColor());
+                root.style.setProperty('--gradient-color-2', getRandomHexColor());
+                root.style.setProperty('--gradient-color-3', getRandomHexColor());
+                root.style.setProperty('--gradient-color-4', getRandomHexColor());
+            }
+
+            // Set random colors on initial load
+            setRandomGradientColors();
+
+        </script>
+    </body>
+    </html>`;
+    return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   }
-}
 
-/**
- * [修正] 核心代理请求处理函数
- * @param {Request} incomingRequest 客户端发来的原始请求
- * @param {object} context Worker的上下文对象
- * @param {string[]} allowedDomains 允许的域名列表
- * @returns {Promise<Response>} 返回给客户端的响应
- */
-async function processProxyRequest(incomingRequest, context, allowedDomains) { // [变化] 接收 allowedDomains 参数
-  const url = new URL(incomingRequest.url);
-  const clientIp = getClientIp(incomingRequest);
+  // ... (rest of the proxy logic remains the same)
 
   const actualUrlStr = url.pathname.substring(1) + url.search + url.hash;
-  if (!validateTargetUrl(actualUrlStr, allowedDomains)) { // [变化] 传递 allowedDomains
-    return new Response(`目标域名不允许代理`, { status: 403 });
-  }
 
   let actualUrl;
   try {
     actualUrl = new URL(actualUrlStr);
-  } catch (e) {
-    return new Response(`无效的目标URL: "${actualUrlStr}"`, { status: 400 });
+  } catch (e1) {
+    if (actualUrlStr.includes('.') && !actualUrlStr.includes('://') && !actualUrlStr.startsWith('/')) {
+      try {
+        actualUrl = new URL('https://' + actualUrlStr);
+      } catch (e2) {
+        return new Response(`无效的目标URL (1): "${actualUrlStr}"`, { status: 400 });
+      }
+    } else {
+      return new Response(`无效的目标URL (2): "${actualUrlStr}"`, { status: 400 });
+    }
   }
 
-  const modifiedRequest = new Request(actualUrl.toString(), incomingRequest);
-  
-  sanitizeHeaders(modifiedRequest.headers);
-  modifiedRequest.headers.delete('Cookie');
+  const modifiedRequestHeaders = new Headers(incomingRequest.headers);
+  const modifiedRequest = new Request(actualUrl.toString(), {
+    headers: modifiedRequestHeaders,
+    method: incomingRequest.method,
+    body: incomingRequest.body,
+    redirect: 'follow'
+  });
+
   handleSpecialCases(modifiedRequest, actualUrl);
 
   try {
     const response = await fetch(modifiedRequest);
     const modifiedResponse = new Response(response.body, response);
-    
-    modifiedResponse.headers.set('Access-Control-Allow-Origin', context.env.TRUSTED_ORIGIN || '*');
+
+    modifiedResponse.headers.set('Access-Control-Allow-Origin', '*');
     modifiedResponse.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS, PUT, DELETE, PATCH');
     modifiedResponse.headers.set('Access-Control-Allow-Headers', incomingRequest.headers.get('Access-Control-Request-Headers') || '*');
     modifiedResponse.headers.set('Access-Control-Expose-Headers', '*');
-    
-    console.log(`[代理] ${clientIp} -> ${actualUrl.hostname} [状态: ${response.status}]`);
-    
+
+    if (incomingRequest.method === 'OPTIONS') {
+      return new Response(null, { headers: modifiedResponse.headers });
+    }
     return modifiedResponse;
   } catch (error) {
-    console.error(`[代理失败] ${clientIp} -> ${actualUrl.hostname}: ${error.message}`);
+    console.error(`Fetch error for ${actualUrl.toString()}: ${error.message}`);
+    if (error.message.includes('DNS lookup failed')) {
+      return new Response(`无法解析目标主机: ${actualUrl.hostname}`, { status: 502 });
+    }
     return new Response(`代理请求失败: ${error.message}`, { status: 502 });
   }
 }
 
-/**
- * [修正] Worker 的主入口函数
- * @param {object} context 包含 request 和 env 等信息的上下文对象
- * @returns {Promise<Response>}
- */
 export async function onRequest(context) {
-  // [修正] 将环境变量的读取和解析移到函数内部
-  const ALLOWED_DOMAINS = context.env.ALLOWED_DOMAINS?.split(',') || [];
-  
-  const url = new URL(context.request.url);
-  
-  switch (url.pathname) {
-    case "/":
-      // ... (HTML 内容保持不变)
-      const html = `
-      <!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CF-Link-Proxy</title><style>body{font-family:sans-serif;margin:2em;background-color:#f8f9fa;color:#212529;} .container{max-width:600px;margin:auto;padding:2em;background-color:#fff;border-radius:8px;box-shadow:0 4px 6px rgba(0,0,0,.1);} h1{color:#007bff;} input[type=url]{width:calc(100% - 22px);padding:10px;margin-bottom:1em;border:1px solid #ced4da;border-radius:4px;} button{padding:10px 15px;background-color:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;} button:hover{background-color:#0056b3;}</style></head><body><div class="container"><h1>URL 代理服务</h1><p>请输入目标链接（仅允许白名单域名）:</p><input type="url" id="targetUrlInput" placeholder="https://example.com" required><button onclick="navigateToProxy()">访问</button></div><script>
-        function navigateToProxy() {
-          const input = document.getElementById("targetUrlInput");
-          const url = input.value.trim();
-          if (!url) return alert("请输入链接！");
-          const target = url.startsWith("http") ? url : "https://" + url;
-          window.location.href = "/" + encodeURIComponent(target);
-        }
-        document.getElementById("targetUrlInput").addEventListener("keypress", e => {
-          if (e.key === "Enter") navigateToProxy();
-        });
-      </script></body></html>`;
-      return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-
-    case "/__health":
-      return new Response("OK", { status: 200 });
-
-    case "/__status":
-      const info = {
-        status: "running",
-        timestamp: new Date().toISOString(),
-        config: {
-          allowedDomains: ALLOWED_DOMAINS // [变化] 使用在这里定义的变量
-        }
-      };
-      return new Response(JSON.stringify(info, null, 2), {
-        headers: { 'Content-Type': 'application/json; charset=utf-8' }
-      });
-
-    default:
-      // [变化] 将解析后的配置传递给代理处理函数
-      return await processProxyRequest(context.request, context, ALLOWED_DOMAINS);
-  }
+  return await processProxyRequest(context.request);
 }
