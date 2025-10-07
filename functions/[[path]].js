@@ -1,36 +1,29 @@
 // File: functions/[[path]].js
 
-// --- 注入脚本和 Rewriter 定义 ---
-const INJECTION_SCRIPT = `<script>(function(){const p='/';const r=(u)=>{if(typeof u==='string'&&(u.startsWith('http://')||u.startsWith('https://'))){return p+u}return u};const f=window.fetch;window.fetch=function(i,n){const u=i instanceof Request?i.url:i;const e=r(u);if(i instanceof Request){i=new Request(e,i)}else{i=e}return f.call(this,i,n)};const o=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(t,u,...a){const e=r(u);return o.apply(this,[t,e,...a])};const m=new MutationObserver(s=>{s.forEach(t=>{t.addedNodes.forEach(n=>{if(n.nodeType===1){const e=el=>{const a=['src','href','action','data-src'];a.forEach(t=>{if(el.hasAttribute(t)){el.setAttribute(t,r(el.getAttribute(t)))}});if(el.hasAttribute('srcset')){el.setAttribute('srcset',el.getAttribute('srcset').split(',').map(t=>{const n=t.trim().split(/\s+/);n[0]=r(n[0]);return n.join(' ')}).join(', '))}};if(n.matches('script,link,img,a,source,iframe,form')){e(n)}n.querySelectorAll('script,link,img,a,source,iframe,form').forEach(e)}})})});m.observe(document.documentElement,{childList:!0,subtree:!0})})();</script>`;
+// --- 核心功能函数 (基于您提供的稳定版本) ---
 
-class HeadInjector { element(element) { element.prepend(INJECTION_SCRIPT, { html: true }); } }
-class AttributeRewriter {
-    constructor(prefix) { this.prefix = prefix; }
-    element(element) {
-        const attrs = ['href', 'src', 'action', 'data-src'];
-        attrs.forEach(attr => {
-            const value = element.getAttribute(attr);
-            if (value && (value.startsWith('http:') || value.startsWith('https://'))) {
-                element.setAttribute(attr, this.prefix + value);
-            }
-        });
-        const srcset = element.getAttribute('srcset');
-        if (srcset) {
-            const newSrcset = srcset.split(',').map(part => {
-                const item = part.trim().split(/\s+/);
-                if (item[0].startsWith('http')) item[0] = this.prefix + item[0];
-                return item.join(' ');
-            }).join(', ');
-            element.setAttribute('srcset', newSrcset);
-        }
+const specialCases = {
+  "*": {
+    "Origin": "DELETE",
+    "Referer": "DELETE"
+  }
+};
+
+function handleSpecialCases(requestToModify, targetUrlForRules) {
+  const rules = specialCases[targetUrlForRules.hostname] || specialCases["*"] || {};
+  for (const [key, value] of Object.entries(rules)) {
+    switch (value) {
+      case "KEEP": break;
+      case "DELETE": requestToModify.headers.delete(key); break;
+      default: requestToModify.headers.set(key, value); break;
     }
+  }
 }
 
-// --- 核心代理逻辑 (基于您提供的稳定版本进行修改) ---
 async function processProxyRequest(incomingRequest) {
   const url = new URL(incomingRequest.url);
 
-  // --- 首页 UI ---
+  // --- 首页 UI (零依赖、高性能版本) ---
   if (url.pathname === "/") {
     const cookieHeader = incomingRequest.headers.get('Cookie') || '';
     const cookies = Object.fromEntries(cookieHeader.split(';').map(c => c.trim().split('=')));
@@ -72,7 +65,7 @@ async function processProxyRequest(incomingRequest) {
           .footer { margin-top: auto; text-align: center; font-size: .875rem; color: var(--footer-text); }
           .header-btn {
             display: flex; align-items: center; gap: .5rem; padding: .5rem 1rem; border-radius: 9999px;
-            font-size: .875rem; font-weight: 500; text-decoration: none; border: none;
+            font-size: .875rem; font-weight: 500; text-decoration: none; border: none; background: none;
             background-color: var(--header-button-bg); color: var(--header-button-text);
             box-shadow: 0 1px 2px 0 rgba(0,0,0,.05); transition: all .2s ease; cursor: pointer;
           }
@@ -159,17 +152,13 @@ async function processProxyRequest(incomingRequest) {
             let targetUrl = urlInput.value.trim();
             if (!targetUrl) return alert('请输入链接!');
             if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
-
-            try { new URL(targetUrl); } 
-            catch (e) { alert('链接格式无效!'); return; }
-
+            try { new URL(targetUrl); } catch (e) { return alert('链接格式无效!'); }
             isLoading = true;
             accessButton.disabled = true;
             buttonText.textContent = '处理中...';
             buttonArrow.style.display = 'none';
             buttonSpinner.style.display = 'inline-block';
-
-            setTimeout(() => { window.location.href = '/' + encodeURIComponent(targetUrl); }, 800);
+            window.location.href = '/' + targetUrl;
           };
           
           const applyTheme = (theme, isInitial) => {
@@ -187,10 +176,9 @@ async function processProxyRequest(incomingRequest) {
           });
           
           accessButton.addEventListener('click', handleAccess);
+          urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleAccess(); });
           
           window.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && document.activeElement === urlInput) { e.preventDefault(); handleAccess(); }
-            if (e.key === 'Escape' && document.activeElement === urlInput) { urlInput.blur(); }
             if (e.key === '/' && document.activeElement !== urlInput) {
               e.preventDefault();
               urlInput.focus();
@@ -205,18 +193,27 @@ async function processProxyRequest(incomingRequest) {
     return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   }
 
-  // --- 代理请求逻辑 ---
-  const actualUrlStr = url.pathname.substring(1) + url.search + url.hash;
+  // --- 代理请求逻辑 (与您提供的稳定版本相同) ---
+  let actualUrlStr = url.pathname.substring(1) + url.search + url.hash;
+  
+  // 增加对编码URL的处理
+  try {
+    actualUrlStr = decodeURIComponent(actualUrlStr);
+  } catch(e) { /* 忽略解码失败，使用原始字符串 */ }
 
   let actualUrl;
   try {
-    actualUrl = new URL(decodeURIComponent(actualUrlStr));
-  } catch (e) {
-    // 尝试不解码，以防URL本身包含编码字符
-    try {
-        actualUrl = new URL(actualUrlStr);
-    } catch (e2) {
-        return new Response(`无效的目标URL: "${actualUrlStr}"`, { status: 400 });
+    actualUrl = new URL(actualUrlStr);
+  } catch (e1) {
+    // 容错逻辑，以防用户输入不带协议的域名
+    if (actualUrlStr.includes('.') && !actualUrlStr.includes('://') && !actualUrlStr.startsWith('/')) {
+      try {
+        actualUrl = new URL('https://' + actualUrlStr);
+      } catch (e2) {
+        return new Response(`无效的目标URL (1): "${actualUrlStr}"`, { status: 400 });
+      }
+    } else {
+      return new Response(`无效的目标URL (2): "${actualUrlStr}"`, { status: 400 });
     }
   }
 
@@ -231,25 +228,28 @@ async function processProxyRequest(incomingRequest) {
 
   try {
     const response = await fetch(modifiedRequest);
-    let newResponse = new Response(response.body, response);
+    const modifiedResponse = new Response(response.body, response);
 
-    // [关键修复] 只对HTML内容应用HTMLRewriter
-    const contentType = newResponse.headers.get('content-type') || '';
-    if (contentType.includes('text/html')) {
-        const rewriter = new HTMLRewriter()
-            .on('head', new HeadInjector())
-            .on('a,link,script,img,iframe,form,source,video,audio', new AttributeRewriter('/'));
-        newResponse = rewriter.transform(newResponse);
+    // 设置CORS头
+    modifiedResponse.headers.set('Access-Control-Allow-Origin', '*');
+    modifiedResponse.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS, PUT, DELETE, PATCH');
+    modifiedResponse.headers.set('Access-Control-Allow-Headers', incomingRequest.headers.get('Access-Control-Request-Headers') || '*');
+    modifiedResponse.headers.set('Access-control-expose-headers', '*');
+
+    // 处理OPTIONS预检请求
+    if (incomingRequest.method === 'OPTIONS') {
+      return new Response(null, { headers: modifiedResponse.headers });
     }
+    
+    return modifiedResponse;
 
-    return newResponse;
   } catch (error) {
-    console.error(`代理错误 for ${actualUrl.toString()}: ${error.message}`);
+    console.error(`Fetch error for ${actualUrl.toString()}: ${error.message}`);
     return new Response(`代理请求失败: ${error.message}`, { status: 502 });
   }
 }
 
-// Pages Functions 入口
+// Pages Functions 标准入口
 export async function onRequest(context) {
   return await processProxyRequest(context.request);
 }
