@@ -1,21 +1,40 @@
 // File: functions/[[path]].js
 
-// --- 后端代理逻辑 (保持不变) ---
-const specialCases = { "*": { "Origin": "DELETE", "Referer": "DELETE" } };
+// --- 注入脚本和 Rewriter 定义 ---
 const INJECTION_SCRIPT = `<script>(function(){const p='/';const r=(u)=>{if(typeof u==='string'&&(u.startsWith('http://')||u.startsWith('https://'))){return p+u}return u};const f=window.fetch;window.fetch=function(i,n){const u=i instanceof Request?i.url:i;const e=r(u);if(i instanceof Request){i=new Request(e,i)}else{i=e}return f.call(this,i,n)};const o=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(t,u,...a){const e=r(u);return o.apply(this,[t,e,...a])};const m=new MutationObserver(s=>{s.forEach(t=>{t.addedNodes.forEach(n=>{if(n.nodeType===1){const e=el=>{const a=['src','href','action','data-src'];a.forEach(t=>{if(el.hasAttribute(t)){el.setAttribute(t,r(el.getAttribute(t)))}});if(el.hasAttribute('srcset')){el.setAttribute('srcset',el.getAttribute('srcset').split(',').map(t=>{const n=t.trim().split(/\s+/);n[0]=r(n[0]);return n.join(' ')}).join(', '))}};if(n.matches('script,link,img,a,source,iframe,form')){e(n)}n.querySelectorAll('script,link,img,a,source,iframe,form').forEach(e)}})})});m.observe(document.documentElement,{childList:!0,subtree:!0})})();</script>`;
+
 class HeadInjector { element(element) { element.prepend(INJECTION_SCRIPT, { html: true }); } }
-class AttributeRewriter { constructor(proxyPrefix) { this.proxyPrefix = proxyPrefix; } element(element) { const attrs = ['href', 'src', 'action', 'data-src']; for (const attr of attrs) { const value = element.getAttribute(attr); if (value && (value.startsWith('http://') || value.startsWith('https://'))) { element.setAttribute(attr, this.proxyPrefix + value); } } const srcset = element.getAttribute('srcset'); if (srcset) { element.setAttribute('srcset', srcset.split(',').map(part => { const item = part.trim().split(/\s+/); if (item[0].startsWith('http')) { item[0] = `${this.proxyPrefix}${item[0]}`; } return item.join(' '); }).join(', ')); } } }
-async function processProxyRequest(incomingRequest) { const url = new URL(incomingRequest.url); let actualUrlStr = url.pathname.substring(1); try { actualUrlStr = decodeURIComponent(actualUrlStr); } catch (e) { } actualUrlStr += url.search + url.hash; let actualUrl; try { actualUrl = new URL(actualUrlStr); } catch (e) { return new Response(`无效的目标URL: "${actualUrlStr}"`, { status: 400 }); } const modifiedRequest = new Request(actualUrl.toString(), { headers: new Headers(incomingRequest.headers), method: incomingRequest.method, body: incomingRequest.body, redirect: 'follow' }); handleSpecialCases(modifiedRequest, actualUrl); const response = await fetch(modifiedRequest); let newResponse = new Response(response.body, response); const contentType = newResponse.headers.get('content-type') || ''; if (contentType.includes('text/html')) { const rewriter = new HTMLRewriter().on('head', new HeadInjector()).on('a,link,script,img,iframe,form,source,video,audio', new AttributeRewriter('/')); newResponse = rewriter.transform(newResponse); } return newResponse; }
+class AttributeRewriter {
+    constructor(prefix) { this.prefix = prefix; }
+    element(element) {
+        const attrs = ['href', 'src', 'action', 'data-src'];
+        attrs.forEach(attr => {
+            const value = element.getAttribute(attr);
+            if (value && (value.startsWith('http:') || value.startsWith('https://'))) {
+                element.setAttribute(attr, this.prefix + value);
+            }
+        });
+        const srcset = element.getAttribute('srcset');
+        if (srcset) {
+            const newSrcset = srcset.split(',').map(part => {
+                const item = part.trim().split(/\s+/);
+                if (item[0].startsWith('http')) item[0] = this.prefix + item[0];
+                return item.join(' ');
+            }).join(', ');
+            element.setAttribute('srcset', newSrcset);
+        }
+    }
+}
 
-// --- Worker 入口函数 ---
-export async function onRequest(context) {
-  const url = new URL(context.request.url);
+// --- 核心代理逻辑 (基于您提供的稳定版本进行修改) ---
+async function processProxyRequest(incomingRequest) {
+  const url = new URL(incomingRequest.url);
 
+  // --- 首页 UI ---
   if (url.pathname === "/") {
-    const cookieHeader = context.request.headers.get('Cookie') || '';
+    const cookieHeader = incomingRequest.headers.get('Cookie') || '';
     const cookies = Object.fromEntries(cookieHeader.split(';').map(c => c.trim().split('=')));
     const theme = cookies.theme === 'dark' ? 'dark' : 'light';
-
     const html = `
     <!DOCTYPE html>
     <html lang="zh-CN" class="${theme}">
@@ -25,20 +44,19 @@ export async function onRequest(context) {
         <title>CF-Link-Proxy</title>
         <style>
           :root {
-            --bg-color: #f8fafc; --text-color: #334155; --card-bg: rgba(255, 255, 255, 0.9);
+            --bg-color: #ffffff; --text-color: #334155; --card-bg: #ffffff;
             --card-shadow: 0 10px 15px -3px rgba(0,0,0,.05), 0 4px 6px -4px rgba(0,0,0,.05);
-            --input-bg: #ffffff; --input-text: #1e293b; --footer-text: #64748b; --kbd-bg: #e2e8f0;
-            --kbd-text: #475569; --button-bg: #3b82f6; --button-hover: #2563eb; --button-text: #ffffff;
-            --header-button-bg: rgba(255, 255, 255, 0.8); --header-button-hover: #ffffff;
-            --header-button-text: #475569; --gradient-start: #3b82f6; --gradient-end: #6366f1;
+            --input-text: #1e293b; --footer-text: #64748b; --kbd-bg: #e2e8f0; --kbd-text: #475569;
+            --button-bg: #3b82f6; --button-hover: #2563eb; --button-text: #ffffff;
+            --header-button-bg: #f1f5f9; --header-button-hover: #e2e8f0; --header-button-text: #475569;
+            --gradient-start: #3b82f6; --gradient-end: #6366f1;
           }
           html.dark {
-            --bg-color: #0f172a; --text-color: #cbd5e1; --card-bg: rgba(30, 41, 59, 0.8);
+            --bg-color: #020617; --text-color: #cbd5e1; --card-bg: #1e293b;
             --card-shadow: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
-            --input-bg: #1e293b; --input-text: #f1f5f9; --footer-text: #64748b; --kbd-bg: #334155;
-            --kbd-text: #e2e8f0; --button-bg: #3b82f6; --button-hover: #60a5fa;
-            --header-button-bg: rgba(30, 41, 59, 0.7); --header-button-hover: #334155;
-            --header-button-text: #cbd5e1;
+            --input-text: #f1f5f9; --footer-text: #64748b; --kbd-bg: #334155; --kbd-text: #e2e8f0;
+            --button-bg: #3b82f6; --button-hover: #60a5fa;
+            --header-button-bg: #1e293b; --header-button-hover: #334155; --header-button-text: #cbd5e1;
           }
           *,:before,:after { box-sizing: border-box; }
           body { 
@@ -54,10 +72,9 @@ export async function onRequest(context) {
           .footer { margin-top: auto; text-align: center; font-size: .875rem; color: var(--footer-text); }
           .header-btn {
             display: flex; align-items: center; gap: .5rem; padding: .5rem 1rem; border-radius: 9999px;
-            font-size: .875rem; font-weight: 500; text-decoration: none; border: none; background: none;
+            font-size: .875rem; font-weight: 500; text-decoration: none; border: none;
             background-color: var(--header-button-bg); color: var(--header-button-text);
             box-shadow: 0 1px 2px 0 rgba(0,0,0,.05); transition: all .2s ease; cursor: pointer;
-            -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
           }
           .header-btn:hover { background-color: var(--header-button-hover); box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1); }
           .title { 
@@ -66,7 +83,6 @@ export async function onRequest(context) {
             -webkit-background-clip: text; background-clip: text; color: transparent;
             opacity: 0; transform: translateY(-20px); animation: fadeInDown .5s .1s ease-out forwards;
           }
-          /* [修改] 增加输入框最大宽度 */
           .form-container { 
             width: 100%; max-width: 48rem; opacity: 0; transform: translateY(-20px);
             animation: fadeInDown .5s .2s ease-out forwards;
@@ -78,7 +94,7 @@ export async function onRequest(context) {
             flex: 1 1 0%; border: none; outline: none; background: transparent;
             font-size: 1rem; padding: 1rem 1.5rem; color: var(--input-text);
           }
-          #url-input::placeholder { color: #9ca3af; } /* 提示文字颜色 */
+          #url-input::placeholder { color: #9ca3af; }
           #access-button {
             border: none; cursor: pointer; padding: 1rem 1.5rem; color: var(--button-text);
             background-color: var(--button-bg); font-weight: 500; transition: background-color .2s ease;
@@ -88,8 +104,7 @@ export async function onRequest(context) {
           #access-button:disabled { opacity: .7; cursor: not-allowed; }
           .icon { width: 1em; height: 1em; display: inline-block; fill: currentColor; vertical-align: middle; }
           .sun-icon, .moon-icon, #button-spinner { display: none; }
-          html.dark .sun-icon { display: inline-block; }
-          html.light .moon-icon { display: inline-block; }
+          html.dark .sun-icon { display: inline-block; } html.light .moon-icon { display: inline-block; }
           @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
           .spinner-icon { animation: spin 1s linear infinite; }
           kbd { 
@@ -115,7 +130,6 @@ export async function onRequest(context) {
         <main class="content">
           <h1 class="title">CF-Link-Proxy</h1>
           <div class="form-container">
-            <!-- [修改] 使用 placeholder 替代 value -->
             <input id="url-input" type="url" placeholder="https://example.com">
             <button id="access-button">
               <span id="button-text">访问</span>
@@ -143,10 +157,7 @@ export async function onRequest(context) {
           const handleAccess = () => {
             if (isLoading) return;
             let targetUrl = urlInput.value.trim();
-            if (!targetUrl) {
-              alert('请输入链接!');
-              return;
-            }
+            if (!targetUrl) return alert('请输入链接!');
             if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
 
             try { new URL(targetUrl); } 
@@ -190,10 +201,55 @@ export async function onRequest(context) {
         });
       </script>
     </body>
-    </html>
-    `;
+    </html>`;
     return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   }
 
+  // --- 代理请求逻辑 ---
+  const actualUrlStr = url.pathname.substring(1) + url.search + url.hash;
+
+  let actualUrl;
+  try {
+    actualUrl = new URL(decodeURIComponent(actualUrlStr));
+  } catch (e) {
+    // 尝试不解码，以防URL本身包含编码字符
+    try {
+        actualUrl = new URL(actualUrlStr);
+    } catch (e2) {
+        return new Response(`无效的目标URL: "${actualUrlStr}"`, { status: 400 });
+    }
+  }
+
+  const modifiedRequest = new Request(actualUrl.toString(), {
+    headers: new Headers(incomingRequest.headers),
+    method: incomingRequest.method,
+    body: incomingRequest.body,
+    redirect: 'follow'
+  });
+
+  handleSpecialCases(modifiedRequest, actualUrl);
+
+  try {
+    const response = await fetch(modifiedRequest);
+    let newResponse = new Response(response.body, response);
+
+    // [关键修复] 只对HTML内容应用HTMLRewriter
+    const contentType = newResponse.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+        const rewriter = new HTMLRewriter()
+            .on('head', new HeadInjector())
+            .on('a,link,script,img,iframe,form,source,video,audio', new AttributeRewriter('/'));
+        newResponse = rewriter.transform(newResponse);
+    }
+
+    return newResponse;
+  } catch (error) {
+    console.error(`代理错误 for ${actualUrl.toString()}: ${error.message}`);
+    return new Response(`代理请求失败: ${error.message}`, { status: 502 });
+  }
+}
+
+// Pages Functions 入口
+export async function onRequest(context) {
   return await processProxyRequest(context.request);
 }
