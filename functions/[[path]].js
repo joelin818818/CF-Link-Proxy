@@ -1,6 +1,6 @@
 // File: functions/[[path]].js
 
-// --- 后端代理逻辑 (保持不变) ---
+// --- 后端代理逻辑 (这部分保持不变) ---
 
 const specialCases = {
   "*": {
@@ -79,47 +79,41 @@ export async function onRequest(context) {
   if (url.pathname === "/") {
     const html = `
     <!DOCTYPE html>
-    <html lang="zh-CN" class="">
+    <html lang="zh-CN" class="light">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>CF-Link-Proxy</title>
-        <!-- 引入 Tailwind CSS Play CDN -->
+        
+        <!-- 关键修复：使用稳定、公开的 CDN -->
         <script src="https://cdn.tailwindcss.com"></script>
-        <!-- 引入 Font Awesome CDN -->
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
         
         <script>
-          // Tailwind 暗黑模式配置
-          tailwind.config = {
-            darkMode: 'class',
-          }
+          // 配置 Tailwind 以支持暗黑模式
+          tailwind.config = { darkMode: 'class' }
         </script>
 
         <style>
-          /* 自定义字体和动画 */
+          /* 添加自定义字体和入场动画 */
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
           body { font-family: 'Inter', sans-serif; }
           
-          /* 模拟 Framer Motion 的入场动画 */
           @keyframes fadeInDown {
             from { opacity: 0; transform: translateY(-20px); }
             to { opacity: 1; transform: translateY(0); }
           }
-          .fade-in-down {
+          .animate-fade-in-down {
             animation: fadeInDown 0.5s ease-out forwards;
           }
 
-          /* 解决 Tailwind CDN 可能导致的闪烁问题 */
-          .hidden-until-loaded {
-            visibility: hidden;
-          }
+          /* 防止因CDN加载延迟导致的样式闪烁 (FOUC) */
+          body { visibility: hidden; }
         </style>
     </head>
-    <body class="hidden-until-loaded">
-      <div id="app-container" class="min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 dark:from-gray-900 dark:to-gray-800 dark:text-white">
+    <body class="bg-gray-50 dark:bg-gray-900">
+      <div class="min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 dark:from-gray-900 dark:to-gray-800 dark:text-white">
         
-        <!-- 顶部导航 -->
         <div class="w-full max-w-6xl flex justify-between items-center mb-auto pt-6">
           <a href="https://github.com/joelin818818/CF-Link-Proxy" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-lg bg-white/80 text-gray-700 hover:bg-white dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 backdrop-blur-sm">
             <i class="fa-brands fa-github"></i>
@@ -132,9 +126,8 @@ export async function onRequest(context) {
           </button>
         </div>
         
-        <!-- 主内容区 -->
         <div class="w-full max-w-3xl flex flex-col items-center justify-center my-12">
-          <h1 class="fade-in-down text-[clamp(2.5rem,8vw,4rem)] font-bold mb-8 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-600">
+          <h1 class="animate-fade-in-down text-[clamp(2.5rem,8vw,4rem)] font-black mb-8 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-600">
             CF-Link-Proxy
           </h1>
           
@@ -152,13 +145,13 @@ export async function onRequest(context) {
           </div>
         </div>
         
-        <!-- 底部信息 -->
         <div class="w-full max-w-6xl mt-auto pb-6 text-center text-sm text-gray-600 dark:text-gray-500">
           <p>通过 CF 网络中继请求 · <kbd class="px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs mx-1">/</kbd> 键快速聚焦搜索框</p>
         </div>
       </div>
 
       <script>
+        // 使用 DOMContentLoaded 确保在操作 DOM 前 HTML 已加载完毕
         document.addEventListener('DOMContentLoaded', () => {
           const urlInput = document.getElementById('url-input');
           const accessButton = document.getElementById('access-button');
@@ -172,36 +165,22 @@ export async function onRequest(context) {
 
           let isLoading = false;
 
-          // --- 核心访问逻辑 ---
           const handleAccess = () => {
             if (isLoading) return;
-            
             let targetUrl = urlInput.value.trim();
-            if (!targetUrl) {
-                alert('请输入链接!');
-                return;
-            }
-            if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://') && targetUrl.includes('.')) {
-                targetUrl = 'https://' + targetUrl;
-            }
-            try {
-                new URL(targetUrl);
-            } catch (e) {
-                alert('链接格式无效!');
-                return;
-            }
+            if (!targetUrl) return alert('请输入链接!');
+            if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
+
+            try { new URL(targetUrl); } 
+            catch (e) { return alert('链接格式无效!'); }
 
             isLoading = true;
             accessButton.disabled = true;
             buttonContent.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>处理中...</span>';
 
-            // 延迟800ms以显示加载动画，然后跳转
-            setTimeout(() => {
-              window.location.href = '/' + targetUrl;
-            }, 800);
+            setTimeout(() => { window.location.href = '/' + targetUrl; }, 800);
           };
 
-          // --- 主题切换逻辑 ---
           const applyTheme = (theme) => {
             if (theme === 'dark') {
               html.classList.add('dark');
@@ -220,7 +199,6 @@ export async function onRequest(context) {
             applyTheme(newTheme);
           });
           
-          // --- 输入框交互逻辑 ---
           urlInput.addEventListener('focus', () => {
             inputContainer.style.transform = 'scale(1.01)';
             focusHighlight.style.opacity = '1';
@@ -231,11 +209,8 @@ export async function onRequest(context) {
             focusHighlight.style.opacity = '0';
           });
           
-          urlInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleAccess();
-          });
-
-          // --- 快捷键逻辑 ---
+          accessButton.addEventListener('click', handleAccess);
+          
           window.addEventListener('keydown', (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
               e.preventDefault();
@@ -251,12 +226,10 @@ export async function onRequest(context) {
             }
           });
           
-          // --- 初始化 ---
           const savedTheme = localStorage.getItem('theme') || 'light';
           applyTheme(savedTheme);
           
-          // 确保在所有资源加载后显示页面，防止样式闪烁
-          document.body.classList.remove('hidden-until-loaded');
+          // 在所有设置完成后，显示页面
           document.body.style.visibility = 'visible';
         });
       </script>
@@ -266,6 +239,5 @@ export async function onRequest(context) {
     return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   }
 
-  // 其他路径走代理逻辑
   return await processProxyRequest(context.request);
 }
