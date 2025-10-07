@@ -4,52 +4,76 @@
 
 const specialCases = { "*": { "Origin": "DELETE", "Referer": "DELETE" } };
 
-function handleSpecialCases(requestToModify, targetUrlForRules) {
-  const rules = specialCases[targetUrlForRules.hostname] || specialCases["*"] || {};
-  for (const [key, value] of Object.entries(rules)) {
-    switch (value) {
-      case "KEEP": break;
-      case "DELETE": requestToModify.headers.delete(key); break;
-      default: requestToModify.headers.set(key, value); break;
+// 注入到代理页面头部的拦截脚本
+const INJECTION_SCRIPT = `
+<script>
+  (function() {
+    const proxyPrefix = '/';
+    
+    // --- 劫持 fetch API ---
+    const originalFetch = window.fetch;
+    window.fetch = function(input, init) {
+      let url = input instanceof Request ? input.url : input;
+      
+      if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+        const modifiedUrl = proxyPrefix + url;
+        if (input instanceof Request) {
+          // 如果输入是Request对象，需要用修改后的URL创建一个新的Request对象
+          input = new Request(modifiedUrl, {
+            ...input,
+            headers: new Headers(input.headers)
+          });
+        } else {
+          input = modifiedUrl;
+        }
+      }
+      return originalFetch.call(this, input, init);
+    };
+
+    // --- 劫持 XMLHttpRequest ---
+    const originalXhrOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url, ...args) {
+      if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+        url = proxyPrefix + url;
+      }
+      return originalXhrOpen.apply(this, [method, url, ...args]);
+    };
+  })();
+</script>
+`;
+
+/**
+ * HTMLRewriter 处理器，用于在 <head> 标签前部注入拦截脚本
+ */
+class HeadRewriter {
+    element(element) {
+        element.prepend(INJECTION_SCRIPT, { html: true });
     }
-  }
 }
 
 /**
- * [新增] HTMLRewriter的处理器，用于重写HTML中的所有链接
+ * HTMLRewriter 处理器，用于重写 HTML 元素的静态链接属性
  */
 class AttributeRewriter {
-  constructor(proxyPrefix) {
-    this.proxyPrefix = proxyPrefix;
-  }
-
+  constructor(proxyPrefix) { this.proxyPrefix = proxyPrefix; }
   element(element) {
     const attributesToRewrite = ['href', 'src', 'action', 'data-src'];
-    
     for (const attr of attributesToRewrite) {
-        let attributeValue = element.getAttribute(attr);
-        if (attributeValue) {
-            // 只重写绝对路径的URL
-            if (attributeValue.startsWith('http://') || attributeValue.startsWith('https://')) {
-                element.setAttribute(attr, this.proxyPrefix + attributeValue);
-            }
-        }
+      const value = element.getAttribute(attr);
+      if (value && (value.startsWith('http://') || value.startsWith('https://'))) {
+        element.setAttribute(attr, this.proxyPrefix + value);
+      }
     }
-    
-    // 特殊处理 srcset 属性，因为它包含多个URL
-    let srcset = element.getAttribute('srcset');
+    const srcset = element.getAttribute('srcset');
     if (srcset) {
-        const newSrcset = srcset
-            .split(',')
-            .map(part => {
-                const [url, descriptor] = part.trim().split(/\s+/);
-                if (url.startsWith('http://') || url.startsWith('https://')) {
-                    return `${this.proxyPrefix}${url} ${descriptor || ''}`.trim();
-                }
-                return part;
-            })
-            .join(', ');
-        element.setAttribute('srcset', newSrcset);
+      const newSrcset = srcset.split(',').map(part => {
+        const [url, descriptor] = part.trim().split(/\s+/);
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          return `${this.proxyPrefix}${url} ${descriptor || ''}`.trim();
+        }
+        return part;
+      }).join(', ');
+      element.setAttribute('srcset', newSrcset);
     }
   }
 }
@@ -65,8 +89,15 @@ async function processProxyRequest(incomingRequest) {
     return new Response(`无效的目标URL: "${actualUrlStr}"`, { status: 400 });
   }
 
+  // 复制请求头，避免修改原始请求
+  const requestHeaders = new Headers(incomingRequest.headers);
+  // 删除 Cloudflare 添加的特定头信息，避免循环和混淆
+  requestHeaders.delete('cf-connecting-ip');
+  requestHeaders.delete('cf-worker');
+  requestHeaders.delete('cf-ray');
+  
   const modifiedRequest = new Request(actualUrl.toString(), {
-    headers: new Headers(incomingRequest.headers),
+    headers: requestHeaders,
     method: incomingRequest.method,
     body: incomingRequest.body,
     redirect: 'follow'
@@ -76,17 +107,15 @@ async function processProxyRequest(incomingRequest) {
 
   const response = await fetch(modifiedRequest);
   
-  // 检查响应是否为HTML，如果是，则进行URL重写
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('text/html')) {
     const rewriter = new HTMLRewriter()
-      .on('a, link, script, img, iframe, form, source, video, audio', new AttributeRewriter('/'));
+      .on('head', new HeadRewriter()) // 注入拦截脚本
+      .on('a, link, script, img, iframe, form, source, video, audio', new AttributeRewriter('/')); // 重写静态链接
     
-    // 返回经过重写后的响应
     return rewriter.transform(response);
   }
 
-  // 如果不是HTML（如CSS, JS, 图片等），直接返回原始响应
   return response;
 }
 
@@ -120,6 +149,7 @@ export async function onRequest(context) {
     </head>
     <body class="bg-gray-50 dark:bg-gray-900">
       <div class="min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 dark:from-gray-900 dark:to-gray-800 dark:text-white">
+        <!-- 主页内容 -->
         <div class="w-full max-w-6xl flex justify-between items-center mb-auto pt-6">
           <a href="https://github.com/joelin818818/CF-Link-Proxy" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover:shadow-lg bg-white/80 text-gray-700 hover:bg-white dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 backdrop-blur-sm">
             <i class="fa-brands fa-github"></i>
@@ -176,8 +206,6 @@ export async function onRequest(context) {
             isLoading = true;
             accessButton.disabled = true;
             buttonContent.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>处理中...</span>';
-
-            // 关键变更：对URL进行编码，防止特殊字符导致路由错误
             setTimeout(() => { window.location.href = '/' + encodeURIComponent(targetUrl); }, 800);
           };
 
@@ -228,5 +256,6 @@ export async function onRequest(context) {
     return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   }
 
+  // 其他所有路径都走代理逻辑
   return await processProxyRequest(context.request);
 }
