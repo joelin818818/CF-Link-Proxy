@@ -10,6 +10,8 @@
 
 *   **⚡️ 极致性能与零依赖**: 整个前端是一个纯粹的单文件应用，所有 CSS 和图标均已内联，无需任何外部网络请求。这确保了首页在任何网络环境下都能实现瞬时加载。
 *   **🎨 动态美学界面**: 拥有一个美观且用户友好的首页，包含平滑过渡的动态渐变背景，能根据用户的系统偏好或手动选择，在亮色与暗黑模式间无缝切换。
+*   **🔄 智能状态重置**: 专为文件下载场景优化。当请求触发文件下载时（页面不跳转），按钮会在短暂延迟后**自动恢复**可用状态，无需刷新页面即可开始新任务。
+*   **❌ 一键清除与重置**: 输入框内置清除按钮，不仅可一键清空长链接，还能在界面意外卡住时**强制重置**按钮状态，大幅提升交互体验。
 *   **🍪 无闪烁主题切换**: 通过 Cookie 记忆用户的颜色主题偏好，在服务端直接渲染，彻底告别了页面加载时的样式闪烁。
 *   **🌐 文件下载中继**: 核心功能是作为下载链接的中继站。当您遇到下载缓慢或不稳定的文件链接时，可以通过本工具进行中转，以期获得更稳定、持续的下载体验。
 *   **🚀 智能 URL 处理**: 自动为用户输入的裸域名（如 `example.com`）补全 `https://` 协议。
@@ -69,6 +71,8 @@ Please note that this tool is **not adapted for full web browsing**. Using it to
 
 *   **⚡️ Extreme Performance & Zero Dependencies**: The entire frontend is a pure, single-file application. All CSS and icons are inlined, requiring zero external network requests. This ensures the homepage loads instantly under any network conditions.
 *   **🎨 Dynamic & Aesthetic UI**: Features a beautiful and user-friendly homepage with a smooth, animated gradient background. It seamlessly switches between light and dark modes based on user preference or system settings.
+*   **🔄 Smart State Reset**: Optimized for file download scenarios. Since file downloads do not trigger a page navigation, the access button **automatically resets** to its active state after a short delay, eliminating the need to refresh the page.
+*   **❌ One-Click Clear & Reset**: Includes a built-in clear button within the input field. This allows for instantly clearing long URLs and acts as a **force reset** for the UI if it gets stuck, greatly improving user experience.
 *   **🍪 Flicker-Free Theming**: Remembers the user's theme preference via a cookie, allowing for server-side rendering of the correct theme. This completely eliminates any flash of incorrect styles on page load.
 *   **🌐 File Download Relay**: The core function is to act as a relay for download links. When you encounter a slow or unstable file link, you can route it through this tool to achieve a more stable and persistent download experience.
 *   **🚀 Smart URL Handling**: Automatically prepends `https://` to bare domains entered by the user (e.g., `example.com`).
