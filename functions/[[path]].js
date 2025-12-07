@@ -1,6 +1,6 @@
 // File: functions/[[path]].js
 
-// --- 核心功能函数 (基于您提供的稳定版本) ---
+// --- 核心功能函数 ---
 
 const specialCases = {
   "*": {
@@ -23,7 +23,7 @@ function handleSpecialCases(requestToModify, targetUrlForRules) {
 async function processProxyRequest(incomingRequest) {
   const url = new URL(incomingRequest.url);
 
-  // --- 首页 UI (零依赖、动态背景版本) ---
+  // --- 首页 UI (已修改：增加重置按钮与自动恢复逻辑) ---
   if (url.pathname === "/") {
     const cookieHeader = incomingRequest.headers.get('Cookie') || '';
     const cookies = Object.fromEntries(cookieHeader.split(';').map(c => c.trim().split('=')));
@@ -45,6 +45,7 @@ async function processProxyRequest(incomingRequest) {
             --header-button-bg: rgba(255, 255, 255, 0.5); --header-button-hover: #ffffff;
             --header-button-text: #475569;
             --title-gradient-start: #3b82f6; --title-gradient-end: #6366f1;
+            --clear-btn-color: #94a3b8; --clear-btn-hover: #475569;
           }
           html.dark {
             --gradient-1: #1e3a8a; --gradient-2: #5b21b6; --gradient-3: #9d174d; --gradient-4: #b45309;
@@ -54,6 +55,7 @@ async function processProxyRequest(incomingRequest) {
             --button-bg: #3b82f6; --button-hover: #60a5fa;
             --header-button-bg: rgba(30, 41, 59, 0.4); --header-button-hover: #334155;
             --header-button-text: #cbd5e1;
+            --clear-btn-color: #64748b; --clear-btn-hover: #e2e8f0;
           }
           *,:before,:after { box-sizing: border-box; }
           body { 
@@ -96,6 +98,15 @@ async function processProxyRequest(incomingRequest) {
           }
           #url-input { flex: 1 1 0%; border: none; outline: none; background: transparent; font-size: 1rem; padding: 1rem 1.5rem; color: var(--input-text); }
           #url-input::placeholder { color: #9ca3af; }
+          
+          /* 新增：清除按钮样式 */
+          #clear-btn {
+            background: none; border: none; cursor: pointer; padding: 0 1rem;
+            color: var(--clear-btn-color); display: none; align-items: center; justify-content: center;
+            transition: color .2s ease;
+          }
+          #clear-btn:hover { color: var(--clear-btn-hover); }
+          
           #access-button {
             border: none; cursor: pointer; padding: 1rem 1.5rem; color: var(--button-text);
             background-color: var(--button-bg); font-weight: 500; transition: background-color .2s ease;
@@ -120,7 +131,7 @@ async function processProxyRequest(incomingRequest) {
       <div class="main-container">
         <header class="header">
           <a href="https://github.com/joelin818818/CF-Link-Proxy" target="_blank" rel="noopener noreferrer" class="header-btn">
-            <svg class="icon" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297 24 5.67 18.627.297 12 .297z"/></svg>
+            <svg class="icon" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.466-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297 24 5.67 18.627.297 12 .297z"/></svg>
             <span>GitHub</span>
           </a>
           <button id="theme-toggle" class="header-btn" aria-label="切换主题">
@@ -133,6 +144,12 @@ async function processProxyRequest(incomingRequest) {
           <h1 class="title">CF-Link-Proxy</h1>
           <div class="form-container">
             <input id="url-input" type="url" placeholder="https://example.com">
+            <!-- 新增：重置按钮 -->
+            <button id="clear-btn" title="清除并重置">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                </svg>
+            </button>
             <button id="access-button">
               <span id="button-text">访问</span>
               <svg id="button-arrow" class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clip-rule="evenodd" /></svg>
@@ -147,6 +164,7 @@ async function processProxyRequest(incomingRequest) {
       <script>
         document.addEventListener('DOMContentLoaded', () => {
           const urlInput = document.getElementById('url-input');
+          const clearBtn = document.getElementById('clear-btn'); // 获取清除按钮
           const accessButton = document.getElementById('access-button');
           const buttonText = document.getElementById('button-text');
           const buttonArrow = document.getElementById('button-arrow');
@@ -156,19 +174,50 @@ async function processProxyRequest(incomingRequest) {
           const html = document.documentElement;
           let isLoading = false;
 
+          // 恢复UI状态的函数
+          const resetUI = () => {
+            isLoading = false;
+            accessButton.disabled = false;
+            buttonText.textContent = '访问';
+            buttonArrow.style.display = 'inline-block';
+            buttonSpinner.style.display = 'none';
+          };
+
           const handleAccess = () => {
             if (isLoading) return;
             let targetUrl = urlInput.value.trim();
             if (!targetUrl) return alert('请输入链接!');
             if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
             try { new URL(targetUrl); } catch (e) { return alert('链接格式无效!'); }
+            
             isLoading = true;
             accessButton.disabled = true;
             buttonText.textContent = '处理中...';
             buttonArrow.style.display = 'none';
             buttonSpinner.style.display = 'inline-block';
+            
+            // 开始跳转
             window.location.href = '/' + targetUrl;
+
+            // 关键修复：设置2.5秒超时自动恢复按钮
+            // 解决下载文件或跳转失败时按钮卡住的问题
+            setTimeout(() => {
+                resetUI();
+            }, 2500);
           };
+
+          // 处理输入框内容变化，控制清除按钮显示
+          const handleInput = () => {
+            clearBtn.style.display = urlInput.value.trim() ? 'flex' : 'none';
+          };
+
+          // 清除按钮点击事件
+          clearBtn.addEventListener('click', () => {
+            urlInput.value = '';
+            handleInput(); // 隐藏按钮
+            urlInput.focus();
+            resetUI(); // 强制重置加载状态（解决卡死问题）
+          });
           
           const applyTheme = (theme, isInitial) => {
             html.className = theme;
@@ -186,7 +235,13 @@ async function processProxyRequest(incomingRequest) {
           
           accessButton.addEventListener('click', handleAccess);
           urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleAccess(); });
+          urlInput.addEventListener('input', handleInput); // 监听输入
           
+          // 页面回退缓存处理（防止点击后退按钮时状态不恢复）
+          window.addEventListener('pageshow', (e) => {
+             if (e.persisted) resetUI();
+          });
+
           window.addEventListener('keydown', (e) => {
             if (e.key === '/' && document.activeElement !== urlInput) {
               e.preventDefault();
@@ -195,6 +250,7 @@ async function processProxyRequest(incomingRequest) {
           });
           
           applyTheme(html.classList.contains('dark') ? 'dark' : 'light', true);
+          handleInput(); // 初始化清除按钮状态
         });
       </script>
     </body>
@@ -207,7 +263,7 @@ async function processProxyRequest(incomingRequest) {
   
   try {
     actualUrlStr = decodeURIComponent(actualUrlStr);
-  } catch(e) { /* 忽略解码失败，使用原始字符串 */ }
+  } catch(e) { /* 忽略解码失败 */ }
 
   let actualUrl;
   try {
@@ -254,7 +310,6 @@ async function processProxyRequest(incomingRequest) {
   }
 }
 
-// Pages Functions 标准入口
 export async function onRequest(context) {
   return await processProxyRequest(context.request);
 }
