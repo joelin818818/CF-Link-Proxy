@@ -23,7 +23,7 @@ function handleSpecialCases(requestToModify, targetUrlForRules) {
 async function processProxyRequest(incomingRequest) {
   const url = new URL(incomingRequest.url);
 
-  // --- 首页 UI (已修改：增加重置按钮与自动恢复逻辑) ---
+  // --- 首页 UI ---
   if (url.pathname === "/") {
     const cookieHeader = incomingRequest.headers.get('Cookie') || '';
     const cookies = Object.fromEntries(cookieHeader.split(';').map(c => c.trim().split('=')));
@@ -35,6 +35,8 @@ async function processProxyRequest(incomingRequest) {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>CF-Link-Proxy</title>
+        <!-- 引入二维码生成库 -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
         <style>
           :root {
             --gradient-1: #3b82f6; --gradient-2: #8b5cf6; --gradient-3: #ec4899; --gradient-4: #f59e0b;
@@ -46,6 +48,7 @@ async function processProxyRequest(incomingRequest) {
             --header-button-text: #475569;
             --title-gradient-start: #3b82f6; --title-gradient-end: #6366f1;
             --clear-btn-color: #94a3b8; --clear-btn-hover: #475569;
+            --modal-bg: rgba(255, 255, 255, 0.95);
           }
           html.dark {
             --gradient-1: #1e3a8a; --gradient-2: #5b21b6; --gradient-3: #9d174d; --gradient-4: #b45309;
@@ -56,6 +59,7 @@ async function processProxyRequest(incomingRequest) {
             --header-button-bg: rgba(30, 41, 59, 0.4); --header-button-hover: #334155;
             --header-button-text: #cbd5e1;
             --clear-btn-color: #64748b; --clear-btn-hover: #e2e8f0;
+            --modal-bg: rgba(30, 41, 59, 0.95);
           }
           *,:before,:after { box-sizing: border-box; }
           body { 
@@ -95,26 +99,44 @@ async function processProxyRequest(incomingRequest) {
             background-color: var(--card-bg); border-radius: 9999px; 
             box-shadow: var(--card-shadow); display: flex; overflow: hidden;
             -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+            align-items: center;
           }
-          #url-input { flex: 1 1 0%; border: none; outline: none; background: transparent; font-size: 1rem; padding: 1rem 1.5rem; color: var(--input-text); }
+          #url-input { flex: 1 1 0%; border: none; outline: none; background: transparent; font-size: 1rem; padding: 1rem 1.5rem; color: var(--input-text); min-width: 0; }
           #url-input::placeholder { color: #9ca3af; }
           
-          /* 新增：清除按钮样式 */
-          #clear-btn {
-            background: none; border: none; cursor: pointer; padding: 0 1rem;
+          .icon-btn {
+            background: none; border: none; cursor: pointer; padding: 0 0.75rem;
             color: var(--clear-btn-color); display: none; align-items: center; justify-content: center;
-            transition: color .2s ease;
+            transition: color .2s ease; flex-shrink: 0;
           }
-          #clear-btn:hover { color: var(--clear-btn-hover); }
+          .icon-btn:hover { color: var(--clear-btn-hover); }
           
           #access-button {
             border: none; cursor: pointer; padding: 1rem 1.5rem; color: var(--button-text);
             background-color: var(--button-bg); font-weight: 500; transition: background-color .2s ease;
-            display: flex; align-items: center; gap: .5rem;
+            display: flex; align-items: center; gap: .5rem; flex-shrink: 0;
           }
           #access-button:hover:not(:disabled) { background-color: var(--button-hover); }
-          #access-button:disabled { opacity: .7; cursor: not-allowed; }
-          .icon { width: 1em; height: 1em; display: inline-block; fill: currentColor; vertical-align: middle; }
+          .icon { width: 1.2rem; height: 1.2rem; display: inline-block; fill: currentColor; vertical-align: middle; }
+          
+          /* 二维码弹窗样式 */
+          #qr-modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none;
+            align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px);
+          }
+          .modal-content {
+            background: var(--modal-bg); padding: 2rem; border-radius: 1.5rem;
+            text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            max-width: 90vw; animation: scaleIn 0.3s ease-out;
+          }
+          @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+          #qr-canvas { background: white; padding: 10px; border-radius: 8px; margin-bottom: 1rem; max-width: 100%; height: auto !important;}
+          .modal-close {
+             margin-top: 1rem; padding: 0.5rem 1.5rem; border: none; border-radius: 999px;
+             background: var(--button-bg); color: white; cursor: pointer; font-weight: 500;
+          }
+          .qr-tip { font-size: 0.875rem; margin-top: 0.5rem; color: var(--footer-text); }
+
           .sun-icon, .moon-icon, #button-spinner { display: none; }
           html.dark .sun-icon { display: inline-block; } html.light .moon-icon { display: inline-block; }
           @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -122,7 +144,6 @@ async function processProxyRequest(incomingRequest) {
           kbd { 
             background-color: var(--kbd-bg); color: var(--kbd-text); border-radius: .25rem;
             padding: .25rem .5rem; font-size: .75rem; margin: 0 .25rem; display: inline-block;
-            box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
           }
           @keyframes fadeInDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
         </style>
@@ -140,16 +161,26 @@ async function processProxyRequest(incomingRequest) {
             <span id="theme-text">Dark Mode</span>
           </button>
         </header>
+
         <main class="content">
           <h1 class="title">CF-Link-Proxy</h1>
           <div class="form-container">
-            <input id="url-input" type="url" placeholder="https://example.com">
-            <!-- 新增：重置按钮 -->
-            <button id="clear-btn" title="清除并重置">
+            <input id="url-input" type="url" placeholder="https://example.com" autocomplete="off">
+            
+            <!-- 生成二维码按钮 -->
+            <button id="qr-btn" class="icon-btn" title="生成访问二维码">
+              <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm0-4h2v2h-2v-2zm-2 2h2v2h-2v-2zm2 2h2v2h-2v-2zM17 17h2v2h-2v-2zm-4-4h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2z"/>
+              </svg>
+            </button>
+
+            <!-- 重置按钮 -->
+            <button id="clear-btn" class="icon-btn" title="清除并重置">
                 <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
                 </svg>
             </button>
+
             <button id="access-button">
               <span id="button-text">访问</span>
               <svg id="button-arrow" class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clip-rule="evenodd" /></svg>
@@ -157,24 +188,40 @@ async function processProxyRequest(incomingRequest) {
             </button>
           </div>
         </main>
+
+        <!-- 二维码遮罩层 -->
+        <div id="qr-modal">
+          <div class="modal-content">
+            <h3 style="margin-top:0">手机扫码访问</h3>
+            <canvas id="qr-canvas"></canvas>
+            <div id="qr-url-display" style="word-break: break-all; font-size: 10px; opacity: 0.6; max-width: 250px; margin: 0 auto;"></div>
+            <p class="qr-tip">使用手机相机或浏览器扫描此码</p>
+            <button class="modal-close" onclick="document.getElementById('qr-modal').style.display='none'">关闭</button>
+          </div>
+        </div>
+
         <footer class="footer">
           <p>通过 CF 网络中继请求 · <kbd>/</kbd> 键快速聚焦搜索框</p>
         </footer>
       </div>
+
       <script>
         document.addEventListener('DOMContentLoaded', () => {
           const urlInput = document.getElementById('url-input');
-          const clearBtn = document.getElementById('clear-btn'); // 获取清除按钮
+          const clearBtn = document.getElementById('clear-btn');
+          const qrBtn = document.getElementById('qr-btn');
           const accessButton = document.getElementById('access-button');
           const buttonText = document.getElementById('button-text');
           const buttonArrow = document.getElementById('button-arrow');
           const buttonSpinner = document.getElementById('button-spinner');
           const themeToggle = document.getElementById('theme-toggle');
           const themeText = document.getElementById('theme-text');
+          const qrModal = document.getElementById('qr-modal');
+          const qrCanvas = document.getElementById('qr-canvas');
+          const qrUrlDisplay = document.getElementById('qr-url-display');
           const html = document.documentElement;
           let isLoading = false;
 
-          // 恢复UI状态的函数
           const resetUI = () => {
             isLoading = false;
             accessButton.disabled = false;
@@ -183,12 +230,22 @@ async function processProxyRequest(incomingRequest) {
             buttonSpinner.style.display = 'none';
           };
 
+          const getProcessedUrl = () => {
+            let targetUrl = urlInput.value.trim();
+            if (!targetUrl) return null;
+            if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
+            try { 
+                new URL(targetUrl); 
+                return window.location.origin + '/' + targetUrl;
+            } catch (e) { 
+                return null; 
+            }
+          };
+
           const handleAccess = () => {
             if (isLoading) return;
-            let targetUrl = urlInput.value.trim();
-            if (!targetUrl) return alert('请输入链接!');
-            if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
-            try { new URL(targetUrl); } catch (e) { return alert('链接格式无效!'); }
+            const fullUrl = getProcessedUrl();
+            if (!fullUrl) return alert('请输入有效的链接!');
             
             isLoading = true;
             accessButton.disabled = true;
@@ -196,27 +253,45 @@ async function processProxyRequest(incomingRequest) {
             buttonArrow.style.display = 'none';
             buttonSpinner.style.display = 'inline-block';
             
-            // 开始跳转
-            window.location.href = '/' + targetUrl;
+            window.location.href = fullUrl.replace(window.location.origin, '');
 
-            // 关键修复：设置2.5秒超时自动恢复按钮
-            // 解决下载文件或跳转失败时按钮卡住的问题
-            setTimeout(() => {
-                resetUI();
-            }, 2500);
+            setTimeout(resetUI, 2500);
           };
 
-          // 处理输入框内容变化，控制清除按钮显示
+          // 二维码生成逻辑
+          qrBtn.addEventListener('click', () => {
+            const fullUrl = getProcessedUrl();
+            if (!fullUrl) return alert('请输入链接以生成二维码!');
+            
+            // 生成二维码
+            new QRious({
+              element: qrCanvas,
+              value: fullUrl,
+              size: 250,
+              level: 'M'
+            });
+            
+            qrUrlDisplay.textContent = fullUrl;
+            qrModal.style.display = 'flex';
+          });
+
+          // 输入控制
           const handleInput = () => {
-            clearBtn.style.display = urlInput.value.trim() ? 'flex' : 'none';
+            const hasValue = !!urlInput.value.trim();
+            clearBtn.style.display = hasValue ? 'flex' : 'none';
+            qrBtn.style.display = hasValue ? 'flex' : 'none';
           };
 
-          // 清除按钮点击事件
           clearBtn.addEventListener('click', () => {
             urlInput.value = '';
-            handleInput(); // 隐藏按钮
+            handleInput();
             urlInput.focus();
-            resetUI(); // 强制重置加载状态（解决卡死问题）
+            resetUI();
+          });
+
+          // 点击遮罩关闭弹窗
+          qrModal.addEventListener('click', (e) => {
+            if (e.target === qrModal) qrModal.style.display = 'none';
           });
           
           const applyTheme = (theme, isInitial) => {
@@ -235,12 +310,9 @@ async function processProxyRequest(incomingRequest) {
           
           accessButton.addEventListener('click', handleAccess);
           urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleAccess(); });
-          urlInput.addEventListener('input', handleInput); // 监听输入
+          urlInput.addEventListener('input', handleInput);
           
-          // 页面回退缓存处理（防止点击后退按钮时状态不恢复）
-          window.addEventListener('pageshow', (e) => {
-             if (e.persisted) resetUI();
-          });
+          window.addEventListener('pageshow', (e) => { if (e.persisted) resetUI(); });
 
           window.addEventListener('keydown', (e) => {
             if (e.key === '/' && document.activeElement !== urlInput) {
@@ -250,7 +322,7 @@ async function processProxyRequest(incomingRequest) {
           });
           
           applyTheme(html.classList.contains('dark') ? 'dark' : 'light', true);
-          handleInput(); // 初始化清除按钮状态
+          handleInput();
         });
       </script>
     </body>
@@ -258,12 +330,12 @@ async function processProxyRequest(incomingRequest) {
     return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   }
 
-  // --- 代理请求逻辑 (稳定版) ---
+  // --- 代理请求逻辑 (保持不变) ---
   let actualUrlStr = url.pathname.substring(1) + url.search + url.hash;
   
   try {
     actualUrlStr = decodeURIComponent(actualUrlStr);
-  } catch(e) { /* 忽略解码失败 */ }
+  } catch(e) { }
 
   let actualUrl;
   try {
@@ -273,10 +345,10 @@ async function processProxyRequest(incomingRequest) {
       try {
         actualUrl = new URL('https://' + actualUrlStr);
       } catch (e2) {
-        return new Response('无效的目标URL (1): "' + actualUrlStr + '"', { status: 400 });
+        return new Response('无效的目标URL (1)', { status: 400 });
       }
     } else {
-      return new Response('无效的目标URL (2): "' + actualUrlStr + '"', { status: 400 });
+      return new Response('无效的目标URL (2)', { status: 400 });
     }
   }
 
@@ -305,7 +377,6 @@ async function processProxyRequest(incomingRequest) {
     return modifiedResponse;
 
   } catch (error) {
-    console.error("Fetch error for " + actualUrl.toString() + ": " + error.message);
     return new Response("代理请求失败: " + error.message, { status: 502 });
   }
 }
