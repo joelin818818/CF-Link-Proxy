@@ -217,6 +217,7 @@ async function processProxyRequest(incomingRequest) {
 
         <footer class="footer">
           <p>通过 CF 网络中继请求 · <kbd>/</kbd> 键快速聚焦搜索框</p>
+          <p style="margin-top: 0.5rem; font-size: 0.75rem; opacity: 0.6;">v2.0</p>
         </footer>
       </div>
 
