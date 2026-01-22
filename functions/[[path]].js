@@ -1,4 +1,19 @@
-// File: functions/[[path]].js
+/**
+ * CF-Link-Proxy Main Handler
+ * File: functions/[[path]].js
+ * 
+ * 命名说明：
+ * - [[path]] 是 Cloudflare Pages 的通配符路由约定
+ * - 匹配所有路径请求（包括根路径 /）
+ * - 实现单文件部署的代理下载服务
+ * 
+ * 主要功能：
+ * 1. 首页 UI 渲染（路径为 / 时）
+ * 2. 代理请求处理（路径包含目标 URL 时）
+ * 3. 主题切换支持（Light/Dark Mode）
+ * 4. 二维码生成
+ * 5. 自定义请求头处理
+ */
 
 // --- 核心功能函数 ---
 
