@@ -269,7 +269,7 @@ async function processProxyRequest(incomingRequest) {
             buttonArrow.style.display = 'none';
             buttonSpinner.style.display = 'inline-block';
             
-            window.location.href = fullUrl.replace(window.location.origin, '');
+            window.open(fullUrl, '_blank', 'noopener,noreferrer');
 
             setTimeout(resetUI, 2500);
           };
