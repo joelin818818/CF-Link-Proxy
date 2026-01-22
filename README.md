@@ -4,7 +4,7 @@
 
 ### 让文件下载更快、更稳定的免费工具
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/joelin818818/CF-Link-Proxy)
+
 
 </div>
 
@@ -81,16 +81,6 @@ const specialCases = {
   }
 };
 ```
-
----
-
-## 📱 界面预览
-
-![界面预览](https://i.imgur.com/example.png)
-
-- **清爽首页**：输入链接即可开始
-- **夜间模式**：自动跟随系统或手动切换
-- **二维码**：点击生成，手机扫码使用
 
 ---
 
