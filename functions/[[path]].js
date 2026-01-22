@@ -142,11 +142,10 @@ async function processProxyRequest(incomingRequest) {
           .modal-content {
             background: var(--modal-bg); padding: 2rem; border-radius: 1.5rem;
             text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-            max-width: 90vw; max-height: 90vh; animation: scaleIn 0.3s ease-out;
-            overflow: auto;
+            max-width: 90vw; animation: scaleIn 0.3s ease-out;
           }
           @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-          #qr-canvas { background: white; padding: 10px; border-radius: 8px; margin-bottom: 1rem; max-width: 100%; height: auto !important; display: block;}
+          #qr-canvas { background: white; padding: 10px; border-radius: 8px; margin-bottom: 1rem; max-width: 100%; height: auto !important;}
           .modal-close {
              margin-top: 1rem; padding: 0.5rem 1.5rem; border: none; border-radius: 999px;
              background: var(--button-bg); color: white; cursor: pointer; font-weight: 500;
@@ -210,7 +209,7 @@ async function processProxyRequest(incomingRequest) {
           <div class="modal-content">
             <h3 style="margin-top:0">手机扫码访问</h3>
             <canvas id="qr-canvas"></canvas>
-            <div id="qr-url-display" style="word-break: break-all; font-size: 11px; opacity: 0.7; max-width: 400px; margin: 0 auto; line-height: 1.4;"></div>
+            <div id="qr-url-display" style="word-break: break-all; font-size: 10px; opacity: 0.6; max-width: 250px; margin: 0 auto;"></div>
             <p class="qr-tip">使用手机相机或浏览器扫描此码</p>
             <button class="modal-close" onclick="document.getElementById('qr-modal').style.display='none'">关闭</button>
           </div>
@@ -280,15 +279,12 @@ async function processProxyRequest(incomingRequest) {
             const fullUrl = getProcessedUrl();
             if (!fullUrl) return alert('请输入链接以生成二维码!');
             
-            // 生成二维码（优化长链接识别）
-            // level: 'L' - 低容错率减少二维码复杂度
-            // size: 400 - 增大尺寸提高识别率
+            // 生成二维码
             new QRious({
               element: qrCanvas,
               value: fullUrl,
-              size: 400,
-              level: 'L',
-              padding: 20
+              size: 250,
+              level: 'M'
             });
             
             qrUrlDisplay.textContent = fullUrl;
